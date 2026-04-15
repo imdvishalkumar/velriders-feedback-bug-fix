@@ -1,0 +1,31 @@
+[2026-04-15 12:18:26] local.ERROR: PHP Parse error: Syntax error, unexpected '=' on line 1 {"exception":"[object] (Psy\\Exception\\ParseErrorException(code: 0): PHP Parse error: Syntax error, unexpected '=' on line 1 at C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\psy\\psysh\\src\\Exception\\ParseErrorException.php:44)
+[stacktrace]
+#0 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\psy\\psysh\\src\\CodeCleaner.php(311): Psy\\Exception\\ParseErrorException::fromParseError()
+#1 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\psy\\psysh\\src\\CodeCleaner.php(240): Psy\\CodeCleaner->parse()
+#2 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\psy\\psysh\\src\\Shell.php(848): Psy\\CodeCleaner->clean()
+#3 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\psy\\psysh\\src\\Shell.php(877): Psy\\Shell->addCode()
+#4 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\psy\\psysh\\src\\Shell.php(1342): Psy\\Shell->setCode()
+#5 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\tinker\\src\\Console\\TinkerCommand.php(76): Psy\\Shell->execute()
+#6 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Container\\BoundMethod.php(36): Laravel\\Tinker\\Console\\TinkerCommand->handle()
+#7 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Container\\Util.php(41): Illuminate\\Container\\BoundMethod::{closure:Illuminate\\Container\\BoundMethod::call():35}()
+#8 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Container\\BoundMethod.php(93): Illuminate\\Container\\Util::unwrapIfClosure()
+#9 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Container\\BoundMethod.php(35): Illuminate\\Container\\BoundMethod::callBoundMethod()
+#10 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Container\\Container.php(662): Illuminate\\Container\\BoundMethod::call()
+#11 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Console\\Command.php(211): Illuminate\\Container\\Container->call()
+#12 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\symfony\\console\\Command\\Command.php(326): Illuminate\\Console\\Command->execute()
+#13 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Console\\Command.php(180): Symfony\\Component\\Console\\Command\\Command->run()
+#14 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\symfony\\console\\Application.php(1096): Illuminate\\Console\\Command->run()
+#15 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\symfony\\console\\Application.php(324): Symfony\\Component\\Console\\Application->doRunCommand()
+#16 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\symfony\\console\\Application.php(175): Symfony\\Component\\Console\\Application->doRun()
+#17 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\vendor\\laravel\\framework\\src\\Illuminate\\Foundation\\Console\\Kernel.php(201): Symfony\\Component\\Console\\Application->run()
+#18 C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\artisan(35): Illuminate\\Foundation\\Console\\Kernel->handle()
+#19 {main}
+"} 
+[2026-04-15 12:37:00] local.ERROR: Object of class stdClass could not be converted to string {"exception":"[object] (Error(code: 0): Object of class stdClass could not be converted to string at C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\check_response.php:43)
+[stacktrace]
+#0 {main}
+"} 
+[2026-04-15 12:39:27] local.ERROR: Object of class stdClass could not be converted to string {"exception":"[object] (Error(code: 0): Object of class stdClass could not be converted to string at C:\\Apache24\\htdocs\\vel-vue-admin\\vel-riders-backend\\check_response.php:43)
+[stacktrace]
+#0 {main}
+"} 
