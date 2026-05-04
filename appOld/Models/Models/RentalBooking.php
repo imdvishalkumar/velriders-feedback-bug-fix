@@ -34,7 +34,7 @@ class RentalBooking extends Model
         'is_exported',
         'rental_type',
         'penalty_details',
-       // 'calculation_details',
+        // 'calculation_details',
         'start_otp',
         'end_otp',
         'start_kilometers',
@@ -70,14 +70,15 @@ class RentalBooking extends Model
         'pending' => '#808080',
     ];
 
-    protected $appends = ['button_visiblity', 'status_map', 'start_images', 'end_images', 'invoice_pdf', 'admin_invoice_pdf', 'summary_pdf', 'admin_summary_pdf', 'message_map', 'dl_status','govtid_status', 'allow_rating', 'rating_value', 'feedback_value', 'pay_now_status', 'admin_penalty_amount','price_summary', 'admin_customer_aggrement'];
+    protected $appends = ['button_visiblity', 'status_map', 'start_images', 'end_images', 'invoice_pdf', 'admin_invoice_pdf', 'summary_pdf', 'admin_summary_pdf', 'message_map', 'dl_status', 'govtid_status', 'allow_rating', 'rating_value', 'feedback_value', 'pay_now_status', 'admin_penalty_amount', 'price_summary', 'admin_customer_aggrement'];
 
     public function bookingTransactions()
     {
         return $this->hasMany(BookingTransaction::class, 'booking_id', 'booking_id');
     }
 
-    public function getStatusMapAttribute() {
+    public function getStatusMapAttribute()
+    {
         $data = [
             'name' => '',
             'color' => '',
@@ -88,26 +89,27 @@ class RentalBooking extends Model
         return $data;
     }
 
-    public function processPaymentNew($payment) {
+    public function processPaymentNew($payment)
+    {
         // version types = new_booking, extension, completion
         // payment types = create_order, extend_order, penalty
-    
+
         // Query the related booking transactions
         $bookingTransaction = BookingTransaction::where('booking_id', $this->booking_id)
             ->where('type', $payment->payment_type)
             ->where('razorpay_order_id', $payment->razorpay_order_id)
             ->first();
-    
+
         if ($bookingTransaction && !$bookingTransaction->paid) {
             $bookingTransaction->paid = true;
             $bookingTransaction->razorpay_payment_id = $payment->razorpay_payment_id;
-    
+
             if ($payment->payment_type == "new_booking") {
                 $this->status = 'confirmed';
-    
+
                 // $lastSequence = RentalBooking::max('sequence_no');
                 // $this->sequence_no = $lastSequence + 1;
-    
+
                 // Send Email and Push notifications to the User
                 // try{
                 //     generateCustomerPdf($this->customer_id, $this->booking_id);
@@ -127,34 +129,35 @@ class RentalBooking extends Model
                 //Send Notification to the user after one minutes if he/she hasn't uploaded docs yet
                 $govIdStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'govtid')->first();
                 $dlStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'dl')->first();
-                if($govIdStatus == '' || $dlStatus == ''){
-                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());    
+                if ($govIdStatus == '' || $dlStatus == '') {
+                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());
                 }
 
             } elseif ($payment->payment_type == "extension") {
                 $this->return_date = $bookingTransaction->end_date;
                 $this->rental_duration_minutes += $bookingTransaction->trip_duration_minutes;
                 $this->total_cost += $bookingTransaction->trip_amount;
-    
+
                 // Send Email and Push notifications to the User
                 SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'extension')->onQueue('emails');
-    
+
             } elseif ($payment->payment_type == "completion") {
                 $this->status = 'completed';
                 $lastSequence = RentalBooking::max('sequence_no');
                 $this->sequence_no = $lastSequence + 1;
-    
+
                 // Send Email and Push notifications to the User
                 SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'completion')->onQueue('emails');
             }
-    
+
             // Save the updated booking transaction and rental booking
             $bookingTransaction->save();
             $this->save();
         }
     }
-    
-    public function processPayment($payment) {
+
+    public function processPayment($payment)
+    {
         //version types = new_booking, extension, completion
         //payment types = create_order, extend_order, penalty
         // $data = $this->updatePaymentData($payment->razorpay_order_id, $payment->razorpay_payment_id, $payment->payment_type);
@@ -235,41 +238,43 @@ class RentalBooking extends Model
 
         //NEW CODE
         $calculationDetails = BookingTransaction::where(['booking_id' => $this->booking_id])->get();
-        if(is_countable($calculationDetails) && count($calculationDetails) > 0){
+        if (is_countable($calculationDetails) && count($calculationDetails) > 0) {
             if ($payment->payment_type == "new_booking") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'new_booking') {
-                        if($version->razorpay_order_id == $payment->razorpay_order_id) {
+                    if ($version->type === 'new_booking') {
+                        if ($version->razorpay_order_id == $payment->razorpay_order_id) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->razorpay_payment_id = $payment->razorpay_payment_id;
                                 $version->save();
-                                $this->status = 'confirmed';    
+                                $this->status = 'confirmed';
                                 // $lastSequence = RentalBooking::max('sequence_no');
                                 // $this->sequence_no = $lastSequence + 1;
                                 // $this->save();
-                                try{
+                                try {
                                     $customerReferralDetails = CustomerReferralDetails::where(['customer_id' => $this->customer_id, 'reward_type' => 2, 'is_paid' => 0])->whereNull('payable_amount')->first();
-                                    if($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0){
+                                    if ($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0) {
                                         $setting = Setting::select('id', 'reward_max_discount_amount')->first();
                                         $payAmt = 0;
-                                        $percent = (float)$customerReferralDetails->reward_amount_or_percent;
-                                        $amount = (float)$version->final_amount;
-                                        if($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0){
-                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);  
+                                        $percent = (float) $customerReferralDetails->reward_amount_or_percent;
+                                        $amount = (float) $version->final_amount;
+                                        if ($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0) {
+                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);
                                         }
                                         $payAmt = round($payAmt);
-                                        if($payAmt > 0){
+                                        if ($payAmt > 0) {
                                             $customerReferralDetails->payable_amount = $payAmt;
                                             $customerReferralDetails->booking_id = $this->booking_id;
-                                            $customerReferralDetails->save();    
+                                            $customerReferralDetails->save();
                                         }
                                     }
-                                }catch(Exception $e){}
+                                } catch (Exception $e) {
+                                }
 
-                                try{
+                                try {
                                     generateCustomerPdf($this->customer_id, $this->booking_id);
-                                }catch(Exception $e){}
+                                } catch (Exception $e) {
+                                }
 
                                 // $fileName = 'customer_agreements_'.$this->customer_id.'_'.$this->booking_id.'.pdf';
                                 // $filePath = public_path().'/customer_aggrements/'.$fileName;
@@ -279,12 +284,12 @@ class RentalBooking extends Model
                                 // }
                                 //Send Email and Push notifications to the User
                                 SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'new_booking', $attachments)->onQueue('emails');
-                                
+
                                 //Send Notification to the user after one minutes if he/she hasn't uploaded docs yet
                                 $govIdStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'govtid')->first();
                                 $dlStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'dl')->first();
-                                if($govIdStatus == '' || $dlStatus == ''){
-                                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());    
+                                if ($govIdStatus == '' || $dlStatus == '') {
+                                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());
                                 }
                             }
                         }
@@ -292,8 +297,8 @@ class RentalBooking extends Model
                 }
             } elseif ($payment->payment_type == "extension") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'extension') {
-                        if($version->razorpay_order_id == $payment->razorpay_order_id) {
+                    if ($version->type === 'extension') {
+                        if ($version->razorpay_order_id == $payment->razorpay_order_id) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->razorpay_payment_id = $payment->razorpay_payment_id;
@@ -310,45 +315,44 @@ class RentalBooking extends Model
                 }
             } elseif ($payment->payment_type == "completion") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'completion') {
-                        if($version->razorpay_order_id == $payment->razorpay_order_id) {
+                    if ($version->type === 'completion') {
+                        if ($version->razorpay_order_id == $payment->razorpay_order_id) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->razorpay_payment_id = $payment->razorpay_payment_id;
                                 $version->save();
-                                $this->status = 'completed';       
+                                $this->status = 'completed';
                                 $lastSequence = RentalBooking::max('sequence_no');
                                 $this->sequence_no = $lastSequence + 1;
-                                $this->save();     
-                                
-                                $fileName = 'customer_agreements_'.$this->customer_id.'_'.$this->booking_id.'.pdf';
-                                $filePath = public_path().'/customer_aggrements/'.$fileName;
-                                if(file_exists($filePath)){ 
+                                $this->save();
+
+                                $fileName = 'customer_agreements_' . $this->customer_id . '_' . $this->booking_id . '.pdf';
+                                $filePath = public_path() . '/customer_aggrements/' . $fileName;
+                                if (file_exists($filePath)) {
                                     unlink($filePath);
                                 }
 
-                                if($version->additional_charges > 0){
+                                if ($version->additional_charges > 0) {
                                     $adminPenalty = AdminPenalty::where(['booking_id' => $this->booking_id, 'is_paid' => 0, 'amount' => $version->additional_charges])->first();
                                     $adminPenalty->is_paid = 1;
                                     $adminPenalty->save();
                                 }
 
                                 //Send Email and Push notifications to the User
-                                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'completion')->onQueue('emails');                 
+                                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'completion')->onQueue('emails');
                             }
                         }
                     }
                 }
-            }
-            elseif ($payment->payment_type == "penalty") {
+            } elseif ($payment->payment_type == "penalty") {
                 $bookingTransaction = BookingTransaction::where(['booking_id' => $this->booking_id, 'order_type' => 'penalty', 'razorpay_order_id' => $payment->razorpay_order_id])->first();
-                if($bookingTransaction){
+                if ($bookingTransaction) {
                     $bookingTransaction->paid = 1;
                     $bookingTransaction->razorpay_payment_id = $payment->razorpay_payment_id ?? '';
                     $bookingTransaction->save();
                 }
                 SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'penalty')->onQueue('emails');
-            } 
+            }
             $this->save();
         }
     }
@@ -441,39 +445,40 @@ class RentalBooking extends Model
 
         // NEW CODE
         $calculationDetails = BookingTransaction::where(['booking_id' => $this->booking_id])->get();
-        if(is_countable($calculationDetails) && count($calculationDetails) > 0){
+        if (is_countable($calculationDetails) && count($calculationDetails) > 0) {
             if ($payment->payment_type == "new_booking") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'new_booking') {
-                        if($version->cashfree_order_id == $payment->cashfree_order_id) {
+                    if ($version->type === 'new_booking') {
+                        if ($version->cashfree_order_id == $payment->cashfree_order_id) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->save();
-                                
-                                $this->status = 'confirmed';    
+
+                                $this->status = 'confirmed';
                                 // $lastSequence = RentalBooking::max('sequence_no');
                                 // $this->sequence_no = $lastSequence + 1;
                                 // $this->save();
 
-                                try{
+                                try {
                                     $customerReferralDetails = CustomerReferralDetails::where(['customer_id' => $this->customer_id, 'reward_type' => 2, 'is_paid' => 0])->whereNull('payable_amount')->first();
-                                    if($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0){
+                                    if ($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0) {
                                         $setting = Setting::select('id', 'reward_max_discount_amount')->first();
                                         $payAmt = 0;
-                                        $percent = (float)$customerReferralDetails->reward_amount_or_percent;
-                                        $amount = (float)$version->final_amount;
-                                        if($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0){
-                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);  
+                                        $percent = (float) $customerReferralDetails->reward_amount_or_percent;
+                                        $amount = (float) $version->final_amount;
+                                        if ($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0) {
+                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);
                                         }
                                         $payAmt = round($payAmt);
-                                        if($payAmt > 0){
+                                        if ($payAmt > 0) {
                                             $customerReferralDetails->payable_amount = $payAmt;
                                             $customerReferralDetails->booking_id = $this->booking_id;
-                                            $customerReferralDetails->save();    
+                                            $customerReferralDetails->save();
                                         }
-                                    }   
-                                }catch(Exception $e){}
-                                
+                                    }
+                                } catch (Exception $e) {
+                                }
+
                                 // try{
                                 //     generateCustomerPdf($this->customer_id, $this->booking_id);
                                 // }catch(Exception $e){}
@@ -485,12 +490,12 @@ class RentalBooking extends Model
                                 // }
                                 //Send Email and Push notifications to the User
                                 SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'new_booking', $attachments)->onQueue('emails');
-                                
+
                                 //Send Notification to the user after one minutes if he/she hasn't uploaded docs yet
                                 $govIdStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'govtid')->first();
                                 $dlStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'dl')->first();
-                                if($govIdStatus == '' || $dlStatus == ''){
-                                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());    
+                                if ($govIdStatus == '' || $dlStatus == '') {
+                                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());
                                 }
                             }
                         }
@@ -498,8 +503,8 @@ class RentalBooking extends Model
                 }
             } elseif ($payment->payment_type == "extension") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'extension') {
-                        if($version->cashfree_order_id == $payment->cashfree_order_id) {
+                    if ($version->type === 'extension') {
+                        if ($version->cashfree_order_id == $payment->cashfree_order_id) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->save();
@@ -514,27 +519,27 @@ class RentalBooking extends Model
                 }
             } elseif ($payment->payment_type == "completion") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'completion') {
-                        if($version->cashfree_order_id == $payment->cashfree_order_id) {
+                    if ($version->type === 'completion') {
+                        if ($version->cashfree_order_id == $payment->cashfree_order_id) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->save();
-                                $this->status = 'completed';      
+                                $this->status = 'completed';
                                 $lastSequence = RentalBooking::max('sequence_no');
                                 $this->sequence_no = $lastSequence + 1;
-                                $this->save(); 
-                                if($version->additional_charges > 0){
+                                $this->save();
+                                if ($version->additional_charges > 0) {
                                     $adminPenalty = AdminPenalty::where(['booking_id' => $this->booking_id, 'is_paid' => 0, 'amount' => $version->additional_charges])->first();
                                     $adminPenalty->is_paid = 1;
                                     $adminPenalty->save();
                                 }
-                                $fileName = 'customer_agreements_'.$this->customer_id.'_'.$this->booking_id.'.pdf';
-                                $filePath = public_path().'/customer_aggrements/'.$fileName;
-                                if(file_exists($filePath)){ 
+                                $fileName = 'customer_agreements_' . $this->customer_id . '_' . $this->booking_id . '.pdf';
+                                $filePath = public_path() . '/customer_aggrements/' . $fileName;
+                                if (file_exists($filePath)) {
                                     unlink($filePath);
                                 }
                                 //Send Email and Push notifications to the User
-                                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'completion')->onQueue('emails');                 
+                                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'completion')->onQueue('emails');
                             }
                         }
                     }
@@ -544,60 +549,63 @@ class RentalBooking extends Model
                 $bookingTransaction->paid = 1;
                 $bookingTransaction->save();
 
-                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'penalty')->onQueue('emails'); 
+                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'penalty')->onQueue('emails');
             }
             $this->save();
         }
     }
 
-    public function processIciciPayment($payment){
+    public function processIciciPayment($payment)
+    {
         $calculationDetails = BookingTransaction::where(['booking_id' => $this->booking_id])->get();
-        if(is_countable($calculationDetails) && count($calculationDetails) > 0){
+        if (is_countable($calculationDetails) && count($calculationDetails) > 0) {
             if ($payment->payment_type == "new_booking") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'new_booking') {
-                        if($version->icici_merchant_txnNo == $payment->icici_merchant_txnNo && $version->icici_txnid == $payment->icici_txnid) {
+                    if ($version->type === 'new_booking') {
+                        if ($version->icici_merchant_txnNo == $payment->icici_merchant_txnNo && $version->icici_txnid == $payment->icici_txnid) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->save();
-                                $this->status = 'confirmed';    
-                                try{
+                                $this->status = 'confirmed';
+                                try {
                                     $customerReferralDetails = CustomerReferralDetails::where(['customer_id' => $this->customer_id, 'reward_type' => 2, 'is_paid' => 0])->whereNull('payable_amount')->first();
-                                    if($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0){
+                                    if ($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0) {
                                         $setting = Setting::select('id', 'reward_max_discount_amount')->first();
                                         $payAmt = 0;
-                                        $percent = (float)$customerReferralDetails->reward_amount_or_percent;
-                                        $amount = (float)$version->final_amount;
-                                        if($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0){
-                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);  
+                                        $percent = (float) $customerReferralDetails->reward_amount_or_percent;
+                                        $amount = (float) $version->final_amount;
+                                        if ($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0) {
+                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);
                                         }
                                         $payAmt = round($payAmt);
-                                        if($payAmt > 0){
+                                        if ($payAmt > 0) {
                                             $customerReferralDetails->payable_amount = $payAmt;
                                             $customerReferralDetails->booking_id = $this->booking_id;
-                                            $customerReferralDetails->save();    
+                                            $customerReferralDetails->save();
                                         }
-                                    }   
-                                }catch(Exception $e){}
-                                try{
+                                    }
+                                } catch (Exception $e) {
+                                }
+                                try {
                                     $customerReferralDetails = CustomerReferralDetails::where(['customer_id' => $this->customer_id, 'reward_type' => 2, 'is_paid' => 0])->whereNull('payable_amount')->first();
-                                    if($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0){
+                                    if ($customerReferralDetails != '' && $version->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0) {
                                         $setting = Setting::select('id', 'reward_max_discount_amount')->first();
                                         $payAmt = 0;
-                                        $percent = (float)$customerReferralDetails->reward_amount_or_percent;
-                                        $amount = (float)$version->final_amount;
-                                        if($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0){
-                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);  
+                                        $percent = (float) $customerReferralDetails->reward_amount_or_percent;
+                                        $amount = (float) $version->final_amount;
+                                        if ($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0) {
+                                            $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);
                                         }
                                         $payAmt = round($payAmt);
-                                        if($payAmt > 0){
+                                        if ($payAmt > 0) {
                                             $customerReferralDetails->payable_amount = $payAmt;
                                             $customerReferralDetails->booking_id = $this->booking_id;
-                                            $customerReferralDetails->save();    
+                                            $customerReferralDetails->save();
                                         }
-                                    }   
-                                }catch(Exception $e){}
-                                
+                                    }
+                                } catch (Exception $e) {
+                                }
+
                                 // try{
                                 //     generateCustomerPdf($this->customer_id, $this->booking_id);
                                 // }catch(Exception $e){}
@@ -609,21 +617,21 @@ class RentalBooking extends Model
                                 // }
                                 //Send Email and Push notifications to the User
                                 SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'new_booking', $attachments)->onQueue('emails');
-                                
+
                                 //Send Notification to the user after one minutes if he/she hasn't uploaded docs yet
                                 $govIdStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'govtid')->first();
                                 $dlStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'dl')->first();
-                                if($govIdStatus == '' || $dlStatus == ''){
-                                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());    
+                                if ($govIdStatus == '' || $dlStatus == '') {
+                                    SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'doc_upload_reminder')->onQueue('emails')->delay(Carbon::now()->addMinute());
                                 }
                             }
                         }
                     }
                 }
-            }elseif ($payment->payment_type == "extension") {
+            } elseif ($payment->payment_type == "extension") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'extension') {
-                        if($version->icici_merchant_txnNo == $payment->icici_merchant_txnNo && $version->icici_txnid == $payment->icici_txnid) {
+                    if ($version->type === 'extension') {
+                        if ($version->icici_merchant_txnNo == $payment->icici_merchant_txnNo && $version->icici_txnid == $payment->icici_txnid) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->save();
@@ -636,39 +644,39 @@ class RentalBooking extends Model
                         }
                     }
                 }
-            }elseif ($payment->payment_type == "completion") {
+            } elseif ($payment->payment_type == "completion") {
                 foreach ($calculationDetails as $version) {
-                    if($version->type === 'completion') {
-                        if($version->icici_merchant_txnNo == $payment->icici_merchant_txnNo && $version->icici_txnid == $payment->icici_txnid) {
+                    if ($version->type === 'completion') {
+                        if ($version->icici_merchant_txnNo == $payment->icici_merchant_txnNo && $version->icici_txnid == $payment->icici_txnid) {
                             if ($version->paid != 1) {
                                 $version->paid = 1;
                                 $version->save();
-                                $this->status = 'completed';      
+                                $this->status = 'completed';
                                 $lastSequence = RentalBooking::max('sequence_no');
                                 $this->sequence_no = $lastSequence + 1;
-                                $this->save(); 
-                                if($version->additional_charges > 0){
+                                $this->save();
+                                if ($version->additional_charges > 0) {
                                     $adminPenalty = AdminPenalty::where(['booking_id' => $this->booking_id, 'is_paid' => 0, 'amount' => $version->additional_charges])->first();
                                     $adminPenalty->is_paid = 1;
                                     $adminPenalty->save();
                                 }
-                                $fileName = 'customer_agreements_'.$this->customer_id.'_'.$this->booking_id.'.pdf';
-                                $filePath = public_path().'/customer_aggrements/'.$fileName;
-                                if(file_exists($filePath)){ 
+                                $fileName = 'customer_agreements_' . $this->customer_id . '_' . $this->booking_id . '.pdf';
+                                $filePath = public_path() . '/customer_aggrements/' . $fileName;
+                                if (file_exists($filePath)) {
                                     unlink($filePath);
                                 }
                                 //Send Email and Push notifications to the User
-                                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'completion')->onQueue('emails');                 
+                                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'completion')->onQueue('emails');
                             }
                         }
                     }
                 }
-            }elseif ($payment->payment_type == "penalty") {
+            } elseif ($payment->payment_type == "penalty") {
                 $bookingTransaction = BookingTransaction::where(['booking_id' => $this->booking_id, 'order_type' => 'penalty', 'icici_merchant_txnNo' => $payment->icici_merchant_txnNo])->first();
                 $bookingTransaction->paid = 1;
                 $bookingTransaction->save();
 
-                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'penalty')->onQueue('emails'); 
+                SendNotificationJob::dispatch($this->customer_id, $this->booking_id, 'penalty')->onQueue('emails');
             }
             $this->save();
         }
@@ -680,13 +688,14 @@ class RentalBooking extends Model
         return $this->generatePriceSummaryFromBookingTransactions();
     }
 
-    public function generatePriceSummaryFromCalculationDetails($encoded) {
+    public function generatePriceSummaryFromCalculationDetails($encoded)
+    {
 
         /*$decodedValue = json_decode($encoded, true);
         if (empty($decodedValue) || !isset($decodedValue['versions']) || !is_array($decodedValue['versions'])) {
             return null;
         }
-    
+
         $data = $decodedValue;
         $calculation_details = [];
         $paid_final_amount_sum = 0;
@@ -699,7 +708,7 @@ class RentalBooking extends Model
 
         foreach ($data['versions'] as $version) {
             $details = $version['details'] ?? [];
-        
+
             // Extract details with defaults if not set
             $trip_amount = number_format($details['trip_amount'] ?? 0, 2);
             $convenience_fee = number_format($details['convenience_fee'] ?? 0, 2);
@@ -708,14 +717,14 @@ class RentalBooking extends Model
             $refundable_deposit = number_format($details['refundable_deposit'] ?? 0, 2);
             $rD = $details['refundable_deposit'] ?? 0;
             $final_amount = $details['final_amount'] ?? 0;
-    
+
             // Skip processing if conditions are not met
             if ((!$details['order']['paid']) && $version['type'] !== 'completion') {
                 continue;
             }
-    
+
             $price_summary = [];
-    
+
             // Determine the type and create initial price summary
             switch ($version['type']) {
                 case 'new_booking':
@@ -798,13 +807,13 @@ class RentalBooking extends Model
                     $extraKmDetails = $this->getExceededKmDetails($exceededKmPayAmountDirect);
                     $this->addToSummary($price_summary, $extraKmDetails['key'], $exceededKmPayAmount, "#000000", "bold");
                 }
-    
+
                 $this->addToSummary($price_summary, $additionalChargesInfo, $additionalCharges, "#000000", "bold");
 
                 $this->addToSummary($price_summary, "Tax Amount", $tax_amt, "#808080", "normal");
 
                 $this->addToSummary($price_summary, "Refundable Deposit Used", $refundableDepositUsed, "#000000", "bold");
-    
+
                 $this->addToSummary($price_summary, "Refundable Deposit Remains", $refundable_deposit, "#000000", "bold");
 
                 if (!$completionPaid) {
@@ -819,7 +828,7 @@ class RentalBooking extends Model
                 $paid_final_amount_sum = floatval($paid_final_amount_sum) - floatval($rD);    
             }
         }
-        
+
         if ($refunded && ($refundedAmount > 0)) {
             $this->addToSummary($calculation_details, "Refunded", number_format($refundedAmount ?? 0, 2), "#000000", "bold");
         }
@@ -837,12 +846,13 @@ class RentalBooking extends Model
     }
 
 
-    public function generatePriceSummaryFromBookingTransactions() {
+    public function generatePriceSummaryFromBookingTransactions()
+    {
         $bookingTransactions = BookingTransaction::where('booking_id', $this->booking_id)->get();
         if ($bookingTransactions->isEmpty()) {
             return null;
         }
-        
+
         $calculation_details = [];
         $paid_final_amount_sum = 0;
         $completionAdded = false;
@@ -851,7 +861,7 @@ class RentalBooking extends Model
         $fromRefundableDeposit = false;
         $refunded = false;
         $refundedAmount = 0;
-    
+
         foreach ($bookingTransactions as $transaction) {
             // Extract details with defaults if not set
             $trip_amount = number_format($transaction->trip_amount ?? 0, 2);
@@ -861,14 +871,14 @@ class RentalBooking extends Model
             $refundable_deposit = number_format($transaction->refundable_deposit ?? 0, 2);
             $rD = $transaction->refundable_deposit ?? 0;
             $final_amount = $transaction->final_amount ?? 0;
-            
+
             // Skip processing if conditions are not met
             if ((!$transaction->paid) /*&& $transaction->type !== 'completion'*/) {
                 //continue;
             }
-    
+
             $price_summary = [];
-    
+
             // Determine the type and create initial price summary
             switch ($transaction->type) {
                 case 'new_booking':
@@ -909,13 +919,13 @@ class RentalBooking extends Model
                 }
                 $trip_amount_string .= $kms_text . "\nFrom $start_date\nTo $end_date";
                 $tripDurationHours = $transaction->trip_duration_minutes / 60;
-                if(!isset($trip_amount) && $trip_amount == ''){
+                if (!isset($trip_amount) && $trip_amount == '') {
                     $trip_amount = calculateTripAmount($transaction->rentalBooking->vehicle->rental_price, $tripDurationHours, $transaction->rentalBooking->vehicle_id);
                 }
                 $trip_amount = str_replace(',', '', $trip_amount);
-                $trip_amount = round((float)$trip_amount, 2);
-                if($transaction->unlimited_kms == 1){
-                   // $trip_amount *= 1.3;
+                $trip_amount = round((float) $trip_amount, 2);
+                if ($transaction->unlimited_kms == 1) {
+                    // $trip_amount *= 1.3;
                 }
                 $trip_amount = number_format($trip_amount);
                 $this->addToSummary($price_summary, $trip_amount_string, $trip_amount, "#000000", "normal");
@@ -931,15 +941,15 @@ class RentalBooking extends Model
                     $coupon_discount = $transaction->coupon_discount ?? 0;
                     $this->addToSummary($price_summary, "Coupon '$coupon_code'", $coupon_discount, "#808080", "normal");
                 }
-                if(strtolower($transaction->type) !== 'penalty'){
-                    $this->addToSummary($price_summary, "Total Price", $total_amount, "#000000", "normal");    
+                if (strtolower($transaction->type) !== 'penalty') {
+                    $this->addToSummary($price_summary, "Total Price", $total_amount, "#000000", "normal");
                 }
-                
-            }    
+
+            }
             // Specific details for new booking
             if ($transaction->type === 'new_booking') {
                 // Add the final_amount to the sum
-                if($transaction->paid){
+                if ($transaction->paid) {
                     $paid_final_amount_sum += $final_amount;
                 }
                 $this->addToSummary($price_summary, "Refundable Deposit", $refundable_deposit, "#D3D3D3", "semibold");
@@ -948,11 +958,11 @@ class RentalBooking extends Model
             }
             // Add the final_amount to the sum
             if ($transaction->type === 'extension') {
-                if($transaction->paid){
+                if ($transaction->paid) {
                     $paid_final_amount_sum += $final_amount;
                 }
             }
-    
+
             // Specific details for completion
             if ($transaction->type === 'completion') {
                 $lateReturn = number_format($transaction->late_return ?? 0, 2);
@@ -964,8 +974,8 @@ class RentalBooking extends Model
                 $amountToPay = number_format($transaction->amount_to_pay ?? 0, 2);
                 $refundable_deposit_remains = $refundable_deposit;
                 $this->addToSummary($price_summary, "Late Return", $lateReturn, "#808080", "normal");
-                $fa = (float)$transaction->amount_to_pay ?? 0;
-                if($transaction->paid){
+                $fa = (float) $transaction->amount_to_pay ?? 0;
+                if ($transaction->paid) {
                     $paid_final_amount_sum += $fa;
                 }
                 if ($exceededKmPayAmount > 0) {
@@ -980,26 +990,26 @@ class RentalBooking extends Model
                     $this->addToSummary($price_summary, "Amount To Pay", $amountToPay, "#000000", "bold");
                 }
             }
-            
+
             if ($transaction->type === 'penalty') {
                 $this->addToSummary($price_summary, "Admin Penalty", $transaction->total_amount, "#000000", "normal");
-                if($transaction->paid){
+                if ($transaction->paid) {
                     $paid_final_amount_sum += $transaction->total_amount;
                 }
             }
             $calculation_details = array_merge($calculation_details, $price_summary);
         }
-        
-        if($fromRefundableDeposit) {
-            if($paid_final_amount_sum > $rD){
-                $paid_final_amount_sum = floatval($paid_final_amount_sum) - floatval($rD);    
+
+        if ($fromRefundableDeposit) {
+            if ($paid_final_amount_sum > $rD) {
+                $paid_final_amount_sum = floatval($paid_final_amount_sum) - floatval($rD);
             }
         }
-        
+
         if ($refunded && ($refundedAmount > 0)) {
             $this->addToSummary($calculation_details, "Refunded", number_format($refundedAmount ?? 0, 2), "#000000", "bold");
         }
-        
+
         $final_amount = number_format($paid_final_amount_sum, 2);
         if ($completionAdded && $completionPaid || !$completionAdded) {
             if ($completionAdded && $completionPaid) {
@@ -1009,8 +1019,8 @@ class RentalBooking extends Model
             }
         }
         return $calculation_details;
-    }    
-        
+    }
+
     // public function getPayNowStatusAttribute(){
     //     $calculationDetails = json_decode($this->calculation_details, true);
     //     $isOrderPaid = $completionFound = $payNow = false;
@@ -1035,9 +1045,11 @@ class RentalBooking extends Model
     //     return $payNow;
     // }
 
-    public function getPayNowStatusAttribute(){
-        /*$completionFound = */ $payNow = false;
-    
+    public function getPayNowStatusAttribute()
+    {
+        /*$completionFound = */
+        $payNow = false;
+
         // Check if there is a completion transaction that is not paid
         /*$completionTransaction = BookingTransaction::where('booking_id', $this->booking_id)
             ->where('type', 'completion')
@@ -1046,7 +1058,7 @@ class RentalBooking extends Model
             $completionFound = true;
             $isOrderPaid = $completionTransaction->paid;
         }*/
-    
+
         // Check if there is an unpaid admin penalty
         $adminPenalty = AdminPenalty::where('booking_id', $this->booking_id)
             ->where('amount', '!=', 0)
@@ -1058,20 +1070,21 @@ class RentalBooking extends Model
             ->where('final_amount', '!=', 0)
             ->where('paid', 0)
             ->exists();
-    
+
         /*if ($completionFound) {
             $payNow = !$isOrderPaid;
         }*/
-    
+
         if ($adminPenalty || $bookingTransaction) {
             $payNow = true;
         }
-    
+
         return $payNow;
     }
-    
 
-    private function addToSummary(&$summary, $key, $value, $color, $style) {
+
+    private function addToSummary(&$summary, $key, $value, $color, $style)
+    {
         //if ($value != 0) {
         if ($value >= 0) {
             $summary[] = [
@@ -1082,9 +1095,10 @@ class RentalBooking extends Model
             ];
         }
     }
-    
+
     // Assuming this method exists and calculates the required exceeded kilometer details
-    private function getExceededKmDetails($exceededKmPayAmount) { 
+    private function getExceededKmDetails($exceededKmPayAmount)
+    {
         // OLD CODE
         // $kilometerLimit = calculateKmLimit(round($this->rental_duration_minutes / 60));
         // $kilometerDifference = $this->end_kilometers - $this->start_kilometers;
@@ -1107,7 +1121,7 @@ class RentalBooking extends Model
         $kilometerDifference = $this->end_kilometers - $this->start_kilometers;
         $extra = $kilometerDifference - $kilometerLimit;
         $rate = 0;
-        if($extra > 0){
+        if ($extra > 0) {
             $rate = floatval($exceededKmPayAmount) / floatval($extra);
         }
         //$rate = round($rate,2);
@@ -1116,14 +1130,14 @@ class RentalBooking extends Model
             "key" => "Extra Kms {$extra} \nPer km rate {$rate}"
         ];
     }
-        
+
     // public function generatePriceSummaryFromCalculationDetails($encoded) {
 
     //     $decodedValue = json_decode($encoded, true);
     //     if (empty($decodedValue) || !isset($decodedValue['versions']) || !is_array($decodedValue['versions'])) {
     //         return null;
     //     }
-    
+
     //     $data = $decodedValue;
     //     $calculation_details = [];
     //     $paid_final_amount_sum = 0; // Initialize the sum for paid final_amount
@@ -1138,13 +1152,13 @@ class RentalBooking extends Model
     //             $tax_amt = number_format($version['details']['tax_amt'] ?? 0, 2);
     //             $total_amount = number_format($version['details']['total_amount'] ?? 0, 2);
     //             $refundable_deposit = number_format($version['details']['refundable_deposit'] ?? 0, 2);
-    
+
     //             // Add the final_amount to the sum
     //             $paid_final_amount_sum += ($version['details']['final_amount'] ?? 0);
     //             if (isset($version['details']['order']['paid']) && $version['details']['order']['paid']) {
-                    
+
     //             } elseif ($version['type'] === 'completion') {
-                    
+
     //             } else {
     //                 continue;
     //             }
@@ -1193,7 +1207,7 @@ class RentalBooking extends Model
     //                     "style" => "normal"
     //                 ]
     //             ]);
-    
+
     //             // Include specific details for each type of order
     //             if ($version['type'] === 'new_booking') {
     //                 $price_summary[] = [
@@ -1216,7 +1230,7 @@ class RentalBooking extends Model
     //                 $refundableDeposit = number_format($version['details']['refundable_deposit'] ?? 0, 2);
     //                 $amountToPay = number_format($version['details']['amount_to_pay'] ?? 0, 2);
 
-    
+
     //                 $price_summary[] = [
     //                     "key" => "Late Return",
     //                     "value" => "₹ {$lateReturn}",
@@ -1283,7 +1297,7 @@ class RentalBooking extends Model
     //                     }
     //                 }
     //             }
-    
+
     //             // Merge price summary arrays
     //             $calculation_details = array_merge($calculation_details, $price_summary);
     //         // }
@@ -1297,7 +1311,7 @@ class RentalBooking extends Model
     //                 "color" => "#000000",
     //                 "style" => "bold"
     //             ];
-        
+
     //         }
     //     } else {
     //         $calculation_details[] = [
@@ -1306,14 +1320,15 @@ class RentalBooking extends Model
     //             "color" => "#000000",
     //             "style" => "bold"
     //         ];
-    
+
     //     }
     //     // Outputting the calculation details as JSON
     //     // return ["final_amount" => $final_amount, "price_summary" => $calculation_details];
     //     return $calculation_details;
     // }
 
-    private function isCompletionStatus($calcDetails) {
+    private function isCompletionStatus($calcDetails)
+    {
         if (isset($calcDetails['versions'])) {
             foreach ($calcDetails['versions'] as $version) {
                 if ($version['type'] == 'completion') {
@@ -1323,8 +1338,9 @@ class RentalBooking extends Model
         }
         return true;
     }
-    
-    public function getMessageMapAttribute() {
+
+    public function getMessageMapAttribute()
+    {
         $data = [
             'message' => '',
             'color' => '',
@@ -1333,21 +1349,21 @@ class RentalBooking extends Model
             $data['color'] = '#38a4a6';
         } elseif ($this->status === 'failed') {
             $data['color'] = '#dc3545';
-        }elseif ($this->status === 'canceled') {
+        } elseif ($this->status === 'canceled') {
             $data['color'] = '#dc3545';
-        }elseif ($this->status === 'running') {
+        } elseif ($this->status === 'running') {
             $data['color'] = '#38a4a6';
-        }elseif ($this->status === 'late return') {
+        } elseif ($this->status === 'late return') {
             $data['color'] = '#38a4a6';
-        }elseif ($this->status === 'damaged') {
+        } elseif ($this->status === 'damaged') {
             $data['color'] = '#dc3545';
-        }elseif ($this->status === 'no show') {
+        } elseif ($this->status === 'no show') {
             $data['color'] = '#38a4a6';
-        }elseif ($this->status === 'refunded') {
+        } elseif ($this->status === 'refunded') {
             $data['color'] = '#38a4a6';
-        }elseif ($this->status === 'awaiting completion') {
+        } elseif ($this->status === 'awaiting completion') {
             $data['color'] = '#38a4a6';
-        }elseif ($this->status === 'completed') {
+        } elseif ($this->status === 'completed') {
             $data['color'] = '#38a4a6';
         } elseif ($this->status === 'pending') {
             $data['color'] = '#38a4a6';
@@ -1360,11 +1376,11 @@ class RentalBooking extends Model
         if ($this->status === 'confirmed') {
             $govIdStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'govtid')->first();
             $dlStatus = CustomerDocument::where('customer_id', $this->customer_id)->where('document_type', 'dl')->first();
-            
+
             $hasApprovedGovtId = CustomerDocument::where('customer_id', $this->customer_id)
-            ->where('is_approved', 'approved')
-            ->where('document_type', 'govtid')
-            ->exists();
+                ->where('is_approved', 'approved')
+                ->where('document_type', 'govtid')
+                ->exists();
 
             $hasApprovedDL = CustomerDocument::where('customer_id', $this->customer_id)
                 ->where('is_approved', 'approved')
@@ -1374,7 +1390,7 @@ class RentalBooking extends Model
             if ($hasApprovedDL && $hasApprovedGovtId) {
                 $data['status'] = '0';
                 $data['message'] = "Your booking has been successfully confirmed Get ready to hit the road!";
-            } elseif(($dlStatus == '' && $govIdStatus == '') || $dlStatus == '' || $govIdStatus == ''){
+            } elseif (($dlStatus == '' && $govIdStatus == '') || $dlStatus == '' || $govIdStatus == '') {
                 $data['status'] = '1';
                 $data['message'] = "Please upload Your Government Id or Driving Licence document/s";
             } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'approved' && $dlStatus->is_approved === 'approved') {
@@ -1388,27 +1404,27 @@ class RentalBooking extends Model
                 // Both documents are awaiting_approval
                 $data['status'] = '0';
                 $data['message'] = "Both Government ID and Driver's License documents are awaiting approval.";
-            } elseif ($govIdStatus != '' && $dlStatus != '' &&  $govIdStatus->is_approved === 'approved' && $dlStatus->is_approved === 'awaiting_approval') {
+            } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'approved' && $dlStatus->is_approved === 'awaiting_approval') {
                 // Government ID approved, Driver's License awaiting_approval
                 $data['message'] = "Government ID document has been approved, but Driver's License document is still awaiting approval.";
-            } elseif ($govIdStatus != '' && $dlStatus != '' &&  $govIdStatus->is_approved === 'approved' && $dlStatus->is_approved === 'rejected') {
+            } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'approved' && $dlStatus->is_approved === 'rejected') {
                 // Government ID approved, Driver's License awaiting_approval
                 $data['message'] = "Government ID document has been approved, but Driver's License document has been rejected, please re-upload.";
-            } elseif ($govIdStatus != '' && $dlStatus != '' &&  $govIdStatus->is_approved === 'awaiting_approval' && $dlStatus->is_approved === 'approved') {
+            } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'awaiting_approval' && $dlStatus->is_approved === 'approved') {
                 // Government ID awaiting_approval, Driver's License approved
                 $data['message'] = "Government ID document is still awaiting approval, but Driver's License document has been approved.";
-            } elseif ($govIdStatus != '' && $dlStatus != '' &&  $govIdStatus->is_approved === 'rejected' && $dlStatus->is_approved === 'awaiting_approval') {
+            } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'rejected' && $dlStatus->is_approved === 'awaiting_approval') {
                 // Government ID rejected, Driver's License awaiting_approval
                 $data['status'] = '1';
                 $data['message'] = "Government ID document has been rejected, please re-upload. Driver's License document is still awaiting approval.";
-            } elseif ($govIdStatus != '' && $dlStatus != '' &&  $govIdStatus->is_approved === 'awaiting_approval' && $dlStatus->is_approved === 'rejected') {
+            } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'awaiting_approval' && $dlStatus->is_approved === 'rejected') {
                 // Government ID awaiting_approval, Driver's License rejected
                 $data['status'] = '1';
                 $data['message'] = "Government ID document is still awaiting approval. Driver's License document has been rejected, please re-upload.";
-            } elseif ($govIdStatus != '' && $dlStatus != '' &&  $govIdStatus->is_approved === 'rejected' && $dlStatus->is_approved === 'approved') {
+            } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'rejected' && $dlStatus->is_approved === 'approved') {
                 // Government ID awaiting_approval, Driver's License rejected
                 $data['message'] = "Government ID document has been rejected, Driver's License document has been approved.";
-            } elseif ($govIdStatus != '' && $dlStatus != '' &&  $govIdStatus->is_approved === 'rejected' && $dlStatus->is_approved === 'rejected') {
+            } elseif ($govIdStatus != '' && $dlStatus != '' && $govIdStatus->is_approved === 'rejected' && $dlStatus->is_approved === 'rejected') {
                 // Both documents are rejected
                 $data['status'] = '1';
                 $data['message'] = "Both Government ID and Driver's License documents have been rejected, please re-upload.";
@@ -1418,22 +1434,22 @@ class RentalBooking extends Model
             }
         } elseif ($this->status === 'failed') {
             $data['message'] = 'We are sorry to inform you that your booking has failed. Please contact support for assistance.';
-        }elseif ($this->status === 'canceled') {
+        } elseif ($this->status === 'canceled') {
             //$data['message'] = 'Your booking has been canceled. We hope to serve you better in the future. You will get refunded within 7 working days.*';
             $data['message'] = "Your Booking Has been Cancelled, We would Like you Serve you better Again for your Next Trip. We will revert you back soon for the Cancellations process as per Company's Terms & Conditions";
-        }elseif ($this->status === 'running') {
+        } elseif ($this->status === 'running') {
             $data['message'] = 'Your booking is in running state. Enjoy your ride!';
-        }elseif ($this->status === 'late return') {
+        } elseif ($this->status === 'late return') {
             $data['message'] = 'We noticed your booking was returned late. Please remember to return the vehicle on time in the future.';
-        }elseif ($this->status === 'damaged') {
+        } elseif ($this->status === 'damaged') {
             $data['message'] = 'We regret to inform you that the vehicle was returned damaged. Please contact support for further assistance.';
-        }elseif ($this->status === 'no show') {
+        } elseif ($this->status === 'no show') {
             $data['message'] = 'We regret to inform you that you did not show up for your booking. Please ensure to inform us if your plans change in the future.';
-        }elseif ($this->status === 'refunded') {
+        } elseif ($this->status === 'refunded') {
             $data['message'] = 'Your booking has been refunded successfully. We apologize for any inconvenience caused.';
-        }elseif ($this->status === 'awaiting completion') {
+        } elseif ($this->status === 'awaiting completion') {
             $data['message'] = 'Your booking is awaiting completion. If you have any questions, feel free to contact us.';
-        }elseif ($this->status === 'completed') {
+        } elseif ($this->status === 'completed') {
             $data['message'] = 'Thank you for riding with us.';
         } elseif ($this->status === 'pending') {
             $data['message'] = "Your booking is currently payment pending approval. Please wait for confirmation.";
@@ -1445,7 +1461,8 @@ class RentalBooking extends Model
         return $data;
     }
 
-    public function getButtonVisiblityAttribute() {
+    public function getButtonVisiblityAttribute()
+    {
         $data = [
             'start_journey_button' => false,
             'upload_images_button' => false,
@@ -1460,9 +1477,9 @@ class RentalBooking extends Model
         $returnDate = Carbon::parse($this->return_date);
 
         if ($this->status === 'confirmed') {
-            if($returnDate < $currentDate){
+            if ($returnDate < $currentDate) {
                 $data['cancel_booking'] = false;
-            }else{
+            } else {
                 $data['cancel_booking'] = true;
             }
         } else {
@@ -1471,12 +1488,12 @@ class RentalBooking extends Model
 
         if ($this->status !== 'confirmed') {
             $data['start_journey_button'] = false;
-        }else{
+        } else {
             $hasApprovedGovtId = CustomerDocument::where('customer_id', $this->customer_id)
-            ->where('is_approved', 'approved')
-            ->where('document_type', 'govtid')
-            ->where('is_blocked', 0)
-            ->exists();
+                ->where('is_approved', 'approved')
+                ->where('document_type', 'govtid')
+                ->where('is_blocked', 0)
+                ->exists();
             $hasApprovedDL = CustomerDocument::where('customer_id', $this->customer_id)
                 ->where('is_approved', 'approved')
                 ->where('is_approved', 'approved')
@@ -1500,8 +1517,8 @@ class RentalBooking extends Model
                 $data['start_journey_button'] = false;
             }
         }
-            
-        
+
+
         if ($this->status === 'running') {
             // Check if 5 images are uploaded for this booking
             // $imageCount = RentalBookingImage::where('booking_id', $this->booking_id)
@@ -1519,7 +1536,7 @@ class RentalBooking extends Model
                 if($completionTransaction->paid != 1){
                     $data['end_journey_button'] = false;
                 }
-            }*/   
+            }*/
             // Check if admin penalty is not paid
             $adminPenalty = AdminPenalty::where(['booking_id' => $this->booking_id, 'is_paid' => 0])->where('amount', '>', 0)->first();
             if ($adminPenalty != '') {
@@ -1545,7 +1562,7 @@ class RentalBooking extends Model
         $carHostVehicleEndJourneyImg = CarHostVehicleStartJourneyImage::where(['image_type' => 2, 'booking_id' => $this->booking_id])->exists();
         $data['start_journey_images_upload_status'] = $carHostVehicleStartJourneyImg;
         $data['end_journey_images_upload_status'] = $carHostVehicleEndJourneyImg;
-        
+
         return $data;
     }
 
@@ -1553,16 +1570,16 @@ class RentalBooking extends Model
     {
         if ($this->status === 'completed') {
             $checkReview = RentalReview::where('booking_id', $this->booking_id)->first();
-            if($checkReview != ''){
+            if ($checkReview != '') {
                 $reviewDateTime = Carbon::parse($checkReview->created_at);
                 $currentDateTime = Carbon::now()->setTimezone('Asia/Kolkata');
-                $reviewDiffereceHours = $currentDateTime->diffInHours($reviewDateTime);    
-                if($reviewDiffereceHours > 24){
-                    return false;        
+                $reviewDiffereceHours = $currentDateTime->diffInHours($reviewDateTime);
+                if ($reviewDiffereceHours > 24) {
+                    return false;
                 }
             }
             return true;
-        }else{
+        } else {
             return false;
         }
     }
@@ -1570,20 +1587,20 @@ class RentalBooking extends Model
     public function getRatingValueAttribute()
     {
         $checkReview = RentalReview::select('review_id', 'booking_id', 'rating')->where('booking_id', $this->booking_id)->first();
-        if($checkReview != ''){
-            $ratingVal = isset($checkReview->rating)?$checkReview->rating:0;
+        if ($checkReview != '') {
+            $ratingVal = isset($checkReview->rating) ? $checkReview->rating : 0;
             return $checkReview->rating;
-        }else{
+        } else {
             return 0;
         }
     }
-    
+
     public function getFeedbackValueAttribute()
     {
         $feedbackVal = '';
         $checkReview = RentalReview::select('review_id', 'booking_id', 'review_text')->where('booking_id', $this->booking_id)->first();
-        if($checkReview != ''){
-            $feedbackVal = $checkReview->review_text ?? NULL;   
+        if ($checkReview != '') {
+            $feedbackVal = $checkReview->review_text ?? NULL;
         }
 
         return $feedbackVal;
@@ -1599,7 +1616,7 @@ class RentalBooking extends Model
     {
         if (strtolower($this->status) === 'completed') {
             return asset('api/rental-booking/invoice/' . $this->booking_id);
-        }else{
+        } else {
             return '';
         }
     }
@@ -1609,7 +1626,7 @@ class RentalBooking extends Model
         if (strtolower($this->status) === 'completed') {
             //return asset('api/booking-invoice/' . $this->booking_id);
             return asset('api/admin/v1/booking-invoice/' . $this->booking_id);
-        }else{
+        } else {
             return '';
         }
     }
@@ -1617,9 +1634,9 @@ class RentalBooking extends Model
     public function getDlStatusAttribute()
     {
         $hasApprovedDL = CustomerDocument::where('customer_id', $this->customer_id)
-        ->where('is_approved', 'approved')
-        ->where('document_type', 'dl')
-        ->exists();
+            ->where('is_approved', 'approved')
+            ->where('document_type', 'dl')
+            ->exists();
 
         return $hasApprovedDL;
     }
@@ -1627,9 +1644,9 @@ class RentalBooking extends Model
     public function getGovtidStatusAttribute()
     {
         $hasApprovedGovtId = CustomerDocument::where('customer_id', $this->customer_id)
-        ->where('is_approved', 'approved')
-        ->where('document_type', 'govtid')
-        ->exists();
+            ->where('is_approved', 'approved')
+            ->where('document_type', 'govtid')
+            ->exists();
 
         return $hasApprovedGovtId;
     }
@@ -1638,7 +1655,7 @@ class RentalBooking extends Model
     {
         if (strtolower($this->status) === 'completed') {
             return asset('api/rental-booking/summary/' . $this->booking_id);
-        }else{
+        } else {
             return '';
         }
     }
@@ -1646,7 +1663,7 @@ class RentalBooking extends Model
     public function getAdminSummaryPdfAttribute()
     {
         //return asset('api/booking-summary/' . $this->booking_id.'/'.$this->customer_id);
-        return asset('api/admin/v1/booking-summary/' . $this->booking_id.'/'.$this->customer_id);
+        return asset('api/admin/v1/booking-summary/' . $this->booking_id . '/' . $this->customer_id);
     }
 
     public function getAdminCustomerAggrementAttribute()
@@ -1690,7 +1707,7 @@ class RentalBooking extends Model
     //     }
     //     return $versionToPass;
     // }
-    
+
     // Define relationships
     public function payment()
     {
@@ -1709,10 +1726,10 @@ class RentalBooking extends Model
         return $this->belongsTo(Vehicle::class, 'vehicle_id', 'vehicle_id');
     }
 
-   /* public function fromBranch()
-    {
-        return $this->belongsTo(Branch::class, 'from_branch_id', 'branch_id');
-    }*/
+    /* public function fromBranch()
+     {
+         return $this->belongsTo(Branch::class, 'from_branch_id', 'branch_id');
+     }*/
 
     /*public function toBranch()
     {
@@ -1728,12 +1745,13 @@ class RentalBooking extends Model
     {
         return $this->belongsTo(Customer::class, 'customer_id', 'customer_id');
     }
-    
+
     public function paymentReportHistory()
     {
         return $this->hasOne(PaymentReportHistory::class, 'booking_id', 'booking_id');
     }
-    public function generatePriceSummary($data) {
+    public function generatePriceSummary($data)
+    {
         // Extracting values from the $data array with default values
         $trip_amount = number_format($data['trip_amount'] ?? 0, 2);
         $coupon_discount = number_format($data['coupon_discount'] ?? 0, 2);
@@ -1743,10 +1761,10 @@ class RentalBooking extends Model
         $total_amount = number_format($data['total_amount'] ?? 0, 2);
         $refundable_deposit = number_format($data['refundable_deposit'] ?? 0, 2);
         $final_amount = number_format($data['final_amount'] ?? 0, 2);
-    
+
         // Creating the price summary array
         $price_summary = [];
-    
+
         // Add entries to price_summary if not empty or zero
         if (!empty($trip_amount) && $trip_amount != '0.00') {
             $price_summary[] = [
@@ -1812,11 +1830,11 @@ class RentalBooking extends Model
                 "style" => "normal"
             ];
         }
-    
+
         // Return the final_amount as a string and the price summary array
         return ["final_amount" => strval($total_amount), "price_summary" => $price_summary];
     }
-    
+
     public function computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $unlimitedKms = false, $couponCode = null, $startDate = null, $endDate = null, $vehicleTypeId = null, $extend = false, $orderType = null, $vehicleCommissionPercent = 0, $taxRate = null, $vehicleId = null)
     {
         // Initialize variables
@@ -1842,7 +1860,7 @@ class RentalBooking extends Model
                 ->first();
             //if ($coupon && $coupon->is_active && now()->between($coupon->valid_from, $coupon->valid_to)) {
             if ($coupon && $coupon->is_active) { //UPDATED ON 6-8-25
-                $cCode = isset($coupon->code)?$coupon->code:'';
+                $cCode = isset($coupon->code) ? $coupon->code : '';
                 $cId = $coupon->id;
                 if ($coupon->type === 'percentage') {
                     $couponDiscount = min($tripAmount * ($coupon->percentage_discount / 100), $coupon->max_discount_amount);
@@ -1866,7 +1884,7 @@ class RentalBooking extends Model
         // Calculate total amount        
         $tripAmountToPay = $tripAmount - $couponDiscount;
         $vehicleCommissionTaxAmt = $vehicleCommissionAmt = 0;
-        if($vehicleCommissionPercent > 0){
+        if ($vehicleCommissionPercent > 0) {
             $vehicleCommissionAmt = ($tripAmountToPay * $vehicleCommissionPercent) / 100;
             $vehicleCommissionAmt = round($vehicleCommissionAmt);
             //$tripAmount -= $vehicleCommissionAmt;
@@ -1889,19 +1907,19 @@ class RentalBooking extends Model
         //     //$refundableDeposit = 0; // Convert to single day price and take 2 days of advance
         //     //$finalAmount += $refundableDeposit;
         // }
-        
+
         /*$finalAmount += round($vehicleCommissionTaxAmt);
         $taxAmt += round($vehicleCommissionTaxAmt);*/
 
         return [
             'start_date' => date('Y-m-d H:i:s', strtotime($startDate)),
             'end_date' => date('Y-m-d H:i:s', strtotime($endDate)),
-            'unlimited_kms' => (int)$unlimitedKms,
-            'rental_price' => (int)$rentalPrice,
+            'unlimited_kms' => (int) $unlimitedKms,
+            'rental_price' => (int) $rentalPrice,
             'trip_duration_minutes' => $tripDurationMinutes,
             'trip_amount' => $tripAmount,
             'tax_amt' => round($taxAmt, 2),
-            'coupon_discount' => (int)$couponDiscount,
+            'coupon_discount' => (int) $couponDiscount,
             'coupon_code' => $cCode,
             'coupon_code_id' => $cId,
             'trip_amount_to_pay' => $tripAmountToPay,
@@ -1925,8 +1943,8 @@ class RentalBooking extends Model
     {
         $adminPenalty = AdminPenalty::where(['booking_id' => $this->booking_id, 'is_paid' => 0])->where('amount', '!=', 0)->first();
         if ($adminPenalty != '') {
-            return (int)$adminPenalty->amount;
-        }else{
+            return (int) $adminPenalty->amount;
+        } else {
             return 0;
         }
     }

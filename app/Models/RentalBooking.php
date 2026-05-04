@@ -1084,8 +1084,7 @@ class RentalBooking extends Model
 
     private function addToSummary(&$summary, $key, $value, $color, $style)
     {
-        //if ($value != 0) {
-        if ($value >= 0) {
+        if (isset($value) && $value !== '') {
             $summary[] = [
                 "key" => $key,
                 "value" => "₹ {$value}",

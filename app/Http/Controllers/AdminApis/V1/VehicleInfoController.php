@@ -609,12 +609,12 @@ class VehicleInfoController extends Controller
             $vehicle->publish = $request->publish_status;
             $vehicle->save();
             if ($request->publish_status == 1) {
-                logAdminActivities("Vehicle Publish Activity", $vehicle);
+                logAdminActivities("Vehicle Publish Activity", null, $vehicle);
                 return $this->successResponse($vehicle, 'Vehicle Published Successfully');
             } else {
                 $vehicle->apply_for_publish = 0;
                 $vehicle->save();
-                logAdminActivities("Vehicle Un-Published Activity", $vehicle);
+                logAdminActivities("Vehicle Un-Published Activity", null, $vehicle);
                 return $this->successResponse($vehicle, 'Vehicle Un-Published Successfully');
             }
         } else {
@@ -1701,7 +1701,7 @@ class VehicleInfoController extends Controller
                     }
                 }
             }
-            logAdminActivities("Vehicle Documents Added", $vehicleRcDoc);
+            logAdminActivities("Vehicle Documents Added", null, $vehicleRcDoc);
             return $this->successResponse([], 'Vehicle Images details are stored succssfully');
         } elseif ($request->vehicle_step == 'price_calculation') {
             // PRICE SUMMARY
@@ -2402,7 +2402,7 @@ class VehicleInfoController extends Controller
         VehicleDocumentTemp::where('vehicle_id', $request->vehicle_id)->delete();
         VehiclePriceDetailTemp::where('vehicle_id', $request->vehicle_id)->delete();
 
-        logAdminActivities('Vehicle Deletion', $vehicle);
+        logAdminActivities('Vehicle Deletion', null, $vehicle);
         return $this->successResponse($vehicle, 'Vehicle Deleted Successfully');
     }
 

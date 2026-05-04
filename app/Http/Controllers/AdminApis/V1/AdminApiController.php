@@ -42,106 +42,241 @@ class AdminApiController extends Controller
     {
         $currentDate = Carbon::now()->toDateString();
         $validator = Validator::make($request->all(), [
-            'start_date' => 'required|date',
-            'end_date' => 'required|date',
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date',
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
 
-        $startDate = Carbon::parse($request->input('start_date'));
-        $endDate = Carbon::parse($request->input('end_date'));
+        // Use default dates if not provided
+        $startDate = $request->start_date ? Carbon::parse($request->start_date)->startOfDay() : Carbon::today()->startOfDay();
+        $endDate = $request->end_date ? Carbon::parse($request->end_date)->endOfDay() : Carbon::today()->endOfDay();
 
+        $pageSize = $request->input('per_page', 5);
+        $perPage = $pageSize;
+
+        // Common Filters
+        $bookingId = $request->booking_id;
+        $vehicleId = $request->vehicle_id;
+        $modelId = $request->model_id;
+        $assignedBy = $request->assigned_by;
+
+        $applyFilters = function ($query) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
+            if ($bookingId) {
+                $query->where('booking_id', $bookingId);
+            }
+            if ($vehicleId) {
+                $query->where('vehicle_id', $vehicleId);
+            }
+            if ($modelId) {
+                $query->whereHas('vehicle.model', function ($q) use ($modelId) {
+                    $q->where('model_id', $modelId);
+                });
+            }
+            if ($assignedBy) {
+                if (\Schema::hasColumn('rental_bookings', 'admin_id')) {
+                    $query->where('admin_id', $assignedBy);
+                }
+            }
+            return $query;
+        };
+
+        $applyPaymentFilters = function ($query) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
+            if ($bookingId || $vehicleId || $modelId || $assignedBy) {
+                $query->whereHas('booking', function ($q) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
+                    if ($bookingId) {
+                        $q->where('booking_id', $bookingId);
+                    }
+                    if ($vehicleId) {
+                        $q->where('vehicle_id', $vehicleId);
+                    }
+                    if ($modelId) {
+                        $q->whereHas('vehicle.model', function ($sub) use ($modelId) {
+                            $sub->where('model_id', $modelId);
+                        });
+                    }
+                    if ($assignedBy) {
+                        $q->where('admin_id', $assignedBy);
+                    }
+                });
+            }
+            return $query;
+        };
+
+        // --- Summary Counts ---
         $todayCashEntry = Payment::where('payment_mode', 'cash')
             ->where('status', 'captured')
-            ->whereDate('created_at', '>=', $startDate)
-            ->whereDate('created_at', '<=', $endDate)
-            ->sum('amount');
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $todayCashEntry = $applyPaymentFilters($todayCashEntry)->sum('amount');
 
         $cancelBookingCount = AdminRentalBooking::where('status', 'canceled')
-            ->whereDate('created_at', '>=', $startDate)
-            ->whereDate('created_at', '<=', $endDate)
-            ->count();
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $cancelBookingCount = $applyFilters($cancelBookingCount)->count();
 
         $runningBookingCount = AdminRentalBooking::where('status', 'running')
-            ->whereDate('created_at', '>=', $startDate)
-            ->whereDate('created_at', '<=', $endDate)
-            ->count();
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $runningBookingCount = $applyFilters($runningBookingCount)->count();
 
         $returnDueBookingCount = AdminRentalBooking::where('status', 'running')
-            ->whereDate('created_at', '>=', $startDate)
-            ->whereDate('created_at', '<=', $endDate)
             ->whereDate('return_date', '<', $currentDate)
-            ->count();
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $returnDueBookingCount = $applyFilters($returnDueBookingCount)->count();
 
-        // Get canceled bookings with customer data
-        $canceledBookingDetails = AdminRentalBooking::with([
-            'customer' => function ($query) {
-                $query->select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob', 'profile_picture_url');
-            }
-        ])->with('vehicle')
-            ->select('booking_id', 'customer_id', 'vehicle_id', 'pickup_date', 'return_date', 'total_cost', 'rental_type', 'status')
-            ->where('status', 'canceled')
-            ->whereDate('created_at', '>=', $startDate)
-            ->whereDate('created_at', '<=', $endDate)
-            ->get();
-        if (!empty($canceledBookingDetails) && is_iterable($canceledBookingDetails)) {
-            collect($canceledBookingDetails)->each(function ($item) {
-                $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+        $pendingPaymentCount = Payment::where('status', 'pending')
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $pendingPaymentCount = $applyPaymentFilters($pendingPaymentCount)->count();
+
+        $adminBookingCount = AdminRentalBooking::whereBetween('created_at', [$startDate, $endDate])
+            ->whereHas('payments', function ($query) {
+                $query->where('razorpay_order_id', 'admin_booking');
             });
-        }
+        $adminBookingCount = $applyFilters($adminBookingCount)->count();
 
-        //$returnDueBookingDetails = ReturnDueBookingDetails
+        $customerBookingCount = AdminRentalBooking::whereBetween('created_at', [$startDate, $endDate])
+            ->whereHas('payments', function ($query) {
+                $query->where('razorpay_order_id', '!=', 'admin_booking');
+            });
+        $customerBookingCount = $applyFilters($customerBookingCount)->count();
 
-        // Get running bookings with customer data
-        $runningBookingDetails = AdminRentalBooking::with([
-            'customer' => function ($query) {
-                $query->select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob', 'profile_picture_url');
-            },
-            'vehicle' => function ($query) {
-                $query->select('vehicle_id', 'model_id', 'year', 'description', 'color', 'license_plate', 'availability');
-            }
-        ])->select('booking_id', 'customer_id', 'vehicle_id', 'pickup_date', 'return_date', 'total_cost', 'rental_type', 'status')->where('status', 'running')->whereDate('created_at', '>=', $startDate)->whereDate('created_at', '<=', $endDate)->get();
+        // --- Paginated Details ---
 
-        // Get return bookings with customer data
-        $returnBookingDetails = AdminRentalBooking::with([
-            'customer' => function ($query) {
-                $query->select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob', 'profile_picture_url');
-            },
-            'vehicle' => function ($query) {
-                $query->select('vehicle_id', 'model_id', 'year', 'description', 'color', 'license_plate', 'availability');
-            }
-        ])->select('booking_id', 'customer_id', 'vehicle_id', 'pickup_date', 'return_date', 'total_cost', 'rental_type', 'status')->where('status', 'running')->whereDate('created_at', '>=', $startDate)->whereDate('created_at', '<=', $endDate)->whereDate('return_date', '<', $currentDate)->get();
-
-        $paymentDetails = Payment::with([
-            'booking.customer' => function ($query) {
-                $query->select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob');
-            }
-        ])
-            ->select('payment_id', 'booking_id', 'amount', 'payment_date', 'status', 'payment_type', 'payment_mode', 'transaction_ref_number')
-            ->with('booking.vehicle')
+        // 1. Cash Entry Details
+        $paymentDetailsQuery = Payment::with(['booking.customer', 'booking.vehicle.model.category.vehicleType'])
             ->where('payment_mode', 'cash')
             ->where('status', 'captured')
-            ->whereDate('created_at', '>=', $startDate)
-            ->whereDate('created_at', '<=', $endDate)
-            ->get();
-        if (!empty($paymentDetails) && is_iterable($paymentDetails)) {
-            collect($paymentDetails)->each(function ($item) {
-                if ($item->booking) {
-                    $item->booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $paymentDetails = $applyPaymentFilters($paymentDetailsQuery)
+            ->paginate($perPage, ['*'], 'page', $request->page ?? 1);
+
+        $paymentDetails->getCollection()->each(function ($item) {
+            if ($item->booking && $item->booking->vehicle) {
+                $item->booking->km_limit = calculateKmLimit($item->booking->rental_duration_minutes / 60, $item->booking->vehicle->model->category->vehicleType->name ?? null);
+                $item->booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+            }
+        });
+
+        // 2. Running Bookings
+        $runningBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+            ->where('status', 'running')
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $runningBookingDetails = $applyFilters($runningBookingDetailsQuery)
+            ->paginate($perPage, ['*'], 'running_page', $request->running_page ?? 1);
+
+        $runningBookingDetails->getCollection()->transform(function ($booking) {
+            $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle->model->category->vehicleType->name ?? null);
+            if ($booking->vehicle) {
+                $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+            }
+            return $booking;
+        });
+
+        // 3. Return Due Bookings
+        $returnBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+            ->where('status', 'running')
+            ->whereDate('return_date', '<', $currentDate)
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $returnBookingDetails = $applyFilters($returnBookingDetailsQuery)
+            ->paginate($perPage, ['*'], 'return_page', $request->return_page ?? 1);
+
+        $returnBookingDetails->getCollection()->transform(function ($booking) {
+            $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle->model->category->vehicleType->name ?? null);
+            $booking->penalty_sum = $booking->adminPenalties()->sum('amount');
+            if ($booking->vehicle) {
+                $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+            }
+            return $booking;
+        });
+
+        // 4. Canceled Bookings
+        $canceledBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType', 'cancellation'])
+            ->where('status', 'canceled')
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $canceledBookingDetails = $applyFilters($canceledBookingDetailsQuery)
+            ->paginate($perPage, ['*'], 'canceled_page', $request->canceled_page ?? 1);
+
+        $canceledBookingDetails->getCollection()->each(function ($item) {
+            $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle->model->category->vehicleType->name ?? null);
+            $item->cancelled_by = $item->cancellation->cancelledBy->username ?? $item->cancellation->data_json['cancelled_by_name'] ?? 'N/A';
+            $item->cancel_reason = $item->cancellation->cancel_reason ?? $item->cancellation->data_json['cancel_reason'] ?? 'N/A';
+            if ($item->vehicle) {
+                $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+            }
+        });
+
+        // 5. Pending Payments
+        $pendingPaymentDetailsQuery = Payment::with(['booking.customer', 'booking.vehicle.model.category.vehicleType'])
+            ->where('status', 'pending')
+            ->whereBetween('created_at', [$startDate, $endDate]);
+        $pendingPayments = $applyPaymentFilters($pendingPaymentDetailsQuery)
+            ->paginate($perPage, ['*'], 'pending_page', $request->pending_page ?? 1);
+
+        // Transform Pending Payments to match Booking structure for frontend
+        $pendingPaymentData = $pendingPayments->getCollection()->map(function ($payment) {
+            $booking = $payment->booking;
+            if ($booking) {
+                $booking->pending_amount = $payment->amount;
+                // Add km_limit for consistency
+                if ($booking->vehicle) {
+                    $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle->model->category->vehicleType->name ?? null);
+                    $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
                 }
+            }
+            return $booking;
+        })->filter();
+
+        // Since we need to maintain pagination metadata, we wrap it back
+        $pendingPaymentDetails = $pendingPayments;
+        $pendingPaymentDetails->setCollection($pendingPaymentData);
+
+        // 6. Admin Bookings
+        $adminBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereHas('payments', function ($query) {
+                $query->where('razorpay_order_id', 'admin_booking');
             });
-        }
+        $adminBookingDetails = $applyFilters($adminBookingDetailsQuery)
+            ->paginate($perPage, ['*'], 'admin_page', $request->admin_page ?? 1);
+
+        $adminBookingDetails->getCollection()->each(function ($item) {
+            $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle->model->category->vehicleType->name ?? null);
+            if ($item->vehicle) {
+                $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+            }
+        });
+
+        // 7. Customer Bookings
+        $customerBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->whereHas('payments', function ($query) {
+                $query->where('razorpay_order_id', '!=', 'admin_booking');
+            });
+        $customerBookingDetails = $applyFilters($customerBookingDetailsQuery)
+            ->paginate($perPage, ['*'], 'customer_page', $request->customer_page ?? 1);
+
+        $customerBookingDetails->getCollection()->each(function ($item) {
+            $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle->model->category->vehicleType->name ?? null);
+            if ($item->vehicle) {
+                $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+            }
+        });
 
         $detailArr = [
             'cash_entry_sum' => (float) $todayCashEntry,
             'canceled_booking_count' => $cancelBookingCount,
             'running_booking_count' => $runningBookingCount,
             'return_due_booking_count' => $returnDueBookingCount,
+            'pending_payment_count' => $pendingPaymentCount,
+            'admin_booking_count' => $adminBookingCount,
+            'customer_booking_count' => $customerBookingCount,
+
+            'payment_details' => $paymentDetails,
             'canceled_booking_details' => $canceledBookingDetails,
             'running_booking_details' => $runningBookingDetails,
             'return_due_booking_details' => $returnBookingDetails,
-            'payment_details' => $paymentDetails,
+            'pending_payment_details' => $pendingPaymentDetails,
+            'admin_booking_details' => $adminBookingDetails,
+            'customer_booking_details' => $customerBookingDetails,
         ];
 
         return $this->successResponse($detailArr, 'Details retrieved successfully');
@@ -166,26 +301,28 @@ class AdminApiController extends Controller
         $search = $request->search ?? '';
         $orderTypes = config('global_values.order_types');
         $orderTypes = implode(',', $orderTypes);
+        $adminPk = (new AdminUser)->getKeyName();
         $validator = Validator::make($request->all(), [
-            'id' => 'nullable|exists:admin_users,admin_id',
+            'id' => "nullable|exists:admin_users,{$adminPk}",
             'order_type' => 'nullable|in:' . $orderTypes,
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
 
+        $adminPk = (new AdminUser)->getKeyName();
         $adminsQuery = AdminUser::select(
-            'admin_users.admin_id as id',
+            "admin_users.{$adminPk} as id",
             'admin_users.username',
             'roles.name as rolename',
             'roles.id as roleid',
             'admin_users.created_at',
             'admin_users.is_deleted',
             'admin_users.mobile_number',
-        )/*->where('is_deleted', 0)*/ ->leftJoin('roles', 'roles.id', '=', 'admin_users.role')->whereNotIn('admin_id', [1]);
+        )/*->where('is_deleted', 0)*/ ->leftJoin('roles', 'roles.id', '=', 'admin_users.role')->whereNotIn("admin_users.{$adminPk}", [1]);
 
         if (!empty($request->id)) {
-            $admin = $adminsQuery->where('admin_id', $request->id)->first();
+            $admin = $adminsQuery->where("admin_users.{$adminPk}", $request->id)->first();
             return $admin ? $this->successResponse($admin, 'Admin details fetched successfully') : $this->errorResponse('Admin user not found');
         }
 
@@ -282,9 +419,10 @@ class AdminApiController extends Controller
 
     public function updateAdmin(Request $request)
     {
+        $adminPk = (new AdminUser)->getKeyName();
         $adminId = $request->id;
         $validator = Validator::make($request->all(), [
-            'id' => 'required|exists:admin_users,admin_id',
+            'id' => "required|exists:admin_users,{$adminPk}",
             'username' => 'required',
             'role' => 'required',
             'mobile_number' => [
@@ -295,15 +433,15 @@ class AdminApiController extends Controller
                 Rule::unique('admin_users', 'mobile_number')
                     ->where(function ($query) {
                         $query->where('is_deleted', 0);
-                    })->ignore($adminId, 'admin_id')
+                    })->ignore($adminId, $adminPk)
             ],
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
 
-        $admin = AdminUser::where('admin_id', $adminId)->first();
-        $oldAdmin = $admin;
+        $admin = AdminUser::where($adminPk, $adminId)->first();
+        $oldAdmin = $admin ? clone $admin : null;
         if ($admin != '') {
             $admin->username = $request->input('username');
             $admin->role = $request->input('role');
@@ -332,7 +470,10 @@ class AdminApiController extends Controller
                     }
                 }
             }
-            logAdminActivities("Admin Updation", $oldAdmin, $admin, null);
+            $differences = compareArray($oldAdmin, $admin);
+            if (isset($differences) && is_countable($differences) && count($differences) > 0) {
+                logAdminActivities("Admin Updation", $oldAdmin, $admin, null);
+            }
 
             return $this->successResponse($admin, 'Admin updated Successfully');
         } else {
@@ -342,8 +483,9 @@ class AdminApiController extends Controller
 
     public function deleteAdmin(Request $request)
     {
+        $adminPk = (new AdminUser)->getKeyName();
         $validator = Validator::make($request->all(), [
-            'id' => 'required|exists:admin_users,admin_id',
+            'id' => "required|exists:admin_users,{$adminPk}",
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
@@ -468,7 +610,7 @@ class AdminApiController extends Controller
         $city->longitude = $request->longitude;
         $city->save();
 
-        if (!isset($request->city_id) && $request->city_id == '') {
+        if (empty($request->city_id)) {
             logAdminActivities("City Creation", $city);
         } else {
             $newVal = $city;
@@ -648,7 +790,7 @@ class AdminApiController extends Controller
         $branch->is_head_branch = $request->is_head_branch;
         $branch->save();
 
-        if (!isset($request->branch_id) && $request->branch_id == '') {
+        if (empty($request->branch_id)) {
             logAdminActivities("Branch Creation", $branch);
         } else {
             $newVal = $branch;
@@ -929,7 +1071,15 @@ class AdminApiController extends Controller
         $faq->is_active = $request->is_active;
         $faq->save();
 
-        logAdminActivities("Create or Update Faqs", $oldFaq, $faq, null);
+        if (empty($request->faq_id)) {
+            logAdminActivities("Faq Creation", $faq);
+        } else {
+            $newVal = $faq;
+            $differences = compareArray($oldFaq, $newVal);
+            if (isset($differences) && is_countable($differences) && count($differences) > 0) {
+                logAdminActivities('Faq Updation', $oldFaq, $newVal);
+            }
+        }
         return $this->successResponse($faq, 'Faq set Successfully');
     }
 
@@ -1042,7 +1192,15 @@ class AdminApiController extends Controller
         $imageSlider->is_active = $request->is_active ?? NULL;
         $imageSlider->save();
 
-        logAdminActivities('Image Banner Creation', $oldBanner, $imageSlider, NULL);
+        if (empty($request->banner_id)) {
+            logAdminActivities("Slider Creation", $imageSlider);
+        } else {
+            $newVal = $imageSlider;
+            $differences = compareArray($oldBanner, $newVal);
+            if (isset($differences) && is_countable($differences) && count($differences) > 0) {
+                logAdminActivities('Slider Updation', $oldBanner, $newVal);
+            }
+        }
         return $this->successResponse($imageSlider, 'Image Banner data set Successfully');
     }
 
@@ -1349,68 +1507,167 @@ class AdminApiController extends Controller
         $search = $request->search ?? '';
         $orderTypes = config('global_values.order_types');
         $orderTypes = implode(',', $orderTypes);
+
+        $adminPk = (new AdminUser)->getKeyName();
+        $logTable = (new AdminActivityLog)->getTable();
+        $logHasAdminId = \Schema::hasColumn($logTable, 'admin_id');
+        \Log::info("AdminPK :111", [$adminPk]);
         $validator = Validator::make($request->all(), [
-            'admin_id' => 'nullable|exists:admin_users,admin_id',
+            'admin_id' => "nullable|exists:admin_users,{$adminPk}",
             'order_type' => 'nullable|in:' . $orderTypes,
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
 
-        $adminActivityLog = AdminActivityLog::select('admin_activity_log.log_id', 'admin_activity_log.activity_description', 'admin_activity_log.old_value', 'admin_activity_log.new_value', 'admin_users.admin_id', 'admin_users.username', 'roles.name as rolename', 'admin_users.created_at', 'admin_users.updated_at')
-            ->leftJoin('admin_users', 'admin_users.admin_id', '=', 'admin_activity_log.admin_id')
-            ->leftJoin('roles', 'roles.id', '=', 'admin_users.role')
-            ->whereNotIn('admin_users.admin_id', [1])
-            ->with([
-                'adminDetails' => function ($q) {
-                    $q->select('admin_id', 'username', 'role', 'created_at', 'updated_at');
-                }
-            ]);
+        $adminActivityLog = AdminActivityLog::select(
+            "{$logTable}.log_id",
+            "{$logTable}.activity_description",
+            "{$logTable}.old_value",
+            "{$logTable}.new_value",
+            "{$logTable}.created_at as log_date"
+        );
 
-        if (!empty($request->admin_id)) {
-            $adminLog = $adminActivityLog->where('admin_id', $request->admin_id)->first();
-            $adminLog->old_value = json_decode($adminLog->old_value);
-            $adminLog->new_value = json_decode($adminLog->new_value);
-            return $adminLog ? $this->successResponse($adminLog, 'Admin activity log details fetched successfully') : $this->errorResponse('Admin activity log details are not found');
+        if ($logHasAdminId) {
+            $adminActivityLog->addSelect("admin_users.{$adminPk} as admin_id", "admin_users.username", "roles.name as rolename")
+                ->leftJoin('admin_users', "admin_users.{$adminPk}", '=', "{$logTable}.admin_id")
+                ->leftJoin('roles', 'roles.id', '=', 'admin_users.role')
+                ->whereNotIn("admin_users.{$adminPk}", [1]);
+
+            if (!empty($request->admin_id)) {
+                $adminActivityLog->where("{$logTable}.admin_id", $request->admin_id);
+            }
         }
+
+        if ($search != '') {
+            $adminActivityLog->where(function ($query) use ($search, $logTable, $logHasAdminId) {
+                $query->where("{$logTable}.activity_description", 'LIKE', "%{$search}%");
+                if ($logHasAdminId) {
+                    $query->orWhere("admin_users.username", 'LIKE', "%{$search}%");
+                }
+            });
+        }
+
         if ($orderColumn != '' && $orderType != '') {
-            $adminActivityLog = $adminActivityLog->orderBy($orderColumn, $orderType);
+            // Check if order column exists in log table or is a joined column
+            if (\Schema::hasColumn($logTable, $orderColumn)) {
+                $adminActivityLog = $adminActivityLog->orderBy("{$logTable}.{$orderColumn}", $orderType);
+            } else {
+                $adminActivityLog = $adminActivityLog->orderBy($orderColumn, $orderType);
+            }
+        } else {
+            $adminActivityLog = $adminActivityLog->orderBy("{$logTable}.created_at", 'DESC');
         }
 
         if ($page !== null && $pageSize !== null) {
-            $admins = $adminActivityLog->paginate($pageSize, ['*'], 'page', $page);
-            if (isset($admins) && is_countable($admins) && count($admins) > 0) {
-                $admins->each(function ($log) {
-                    $log->old_value = json_decode($log->old_value);
-                    $log->new_value = json_decode($log->new_value);
-                });
-            }
-            $decodedAdmins = json_decode(json_encode($admins->getCollection()->values()), FALSE);
+            $logs = $adminActivityLog->paginate($pageSize, ['*'], 'page', $page);
+            $logs->getCollection()->transform(function ($log) {
+                $log->old_value = json_decode($log->old_value);
+                $log->new_value = json_decode($log->new_value);
+                $log->log_date = $log->log_date ? date('Y-m-d H:i:s', strtotime($log->log_date)) : null;
+                return $log;
+            });
+
             return $this->successResponse([
-                'admins' => $decodedAdmins,
+                'logs' => $logs->getCollection(),
                 'pagination' => [
-                    'total' => $admins->total(),
-                    'per_page' => $admins->perPage(),
-                    'current_page' => $admins->currentPage(),
-                    'last_page' => $admins->lastPage(),
-                    'from' => ($admins->currentPage() - 1) * $admins->perPage() + 1,
-                    'to' => min($admins->currentPage() * $admins->perPage(), $admins->total()),
+                    'total' => $logs->total(),
+                    'per_page' => $logs->perPage(),
+                    'current_page' => $logs->currentPage(),
+                    'last_page' => $logs->lastPage(),
+                    'from' => $logs->firstItem(),
+                    'to' => $logs->lastItem(),
                 ]
             ], 'Admin activity Log fetched successfully');
         } else {
-            $adminActivityLog = $adminActivityLog->get();
-            $adminActivityLog->each(function ($log) {
+            $logs = $adminActivityLog->get();
+            $logs->transform(function ($log) {
                 $log->old_value = json_decode($log->old_value);
                 $log->new_value = json_decode($log->new_value);
+                $log->log_date = $log->log_date ? date('Y-m-d H:i:s', strtotime($log->log_date)) : null;
+                return $log;
             });
-            $adminActivityLog = [
-                'adminActivityLog' => $adminActivityLog
-            ];
-            if (isset($adminActivityLog) && is_countable($adminActivityLog) && count($adminActivityLog) > 0) {
-                return $this->successResponse($adminActivityLog, 'Admin activity Log fetched successfully');
-            } else {
-                return $this->errorResponse('Admin activity Log not found');
-            }
+
+            return $this->successResponse(['logs' => $logs], 'Admin activity Log fetched successfully');
+        }
+    }
+
+    public function getHostActivityLog(Request $request)
+    {
+        $page = $request->input('page');
+        $pageSize = $request->input('page_size');
+        $orderColumn = $request->order_column ?? '';
+        $orderType = $request->order_type ?? '';
+        $search = $request->search ?? '';
+
+        $logTable = 'host_activity_log';
+        if (!\Schema::hasTable($logTable)) {
+            return $this->errorResponse('Host activity log table not found');
+        }
+
+        $validator = Validator::make($request->all(), [
+            'host_id' => 'nullable|exists:car_hosts,id',
+        ]);
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $query = \DB::table($logTable)->select(
+            "{$logTable}.log_id",
+            "{$logTable}.activity_description",
+            "{$logTable}.old_value",
+            "{$logTable}.new_value",
+            "{$logTable}.created_at as log_date",
+            'car_hosts.id as host_id',
+            'car_hosts.firstname',
+            'car_hosts.lastname'
+        )
+            ->leftJoin('car_hosts', 'car_hosts.id', '=', "{$logTable}.host_id");
+
+        if ($search) {
+            $query->where("{$logTable}.activity_description", 'LIKE', "%{$search}%");
+        }
+
+        if (!empty($request->host_id)) {
+            $query->where("{$logTable}.host_id", $request->host_id);
+        }
+
+        if ($orderColumn && $orderType) {
+            $query->orderBy($orderColumn, $orderType);
+        } else {
+            $query->orderBy("{$logTable}.created_at", 'DESC');
+        }
+
+        if ($page !== null && $pageSize !== null) {
+            $logs = $query->paginate($pageSize, ['*'], 'page', $page);
+            $logs->getCollection()->transform(function ($log) {
+                $log->old_value = json_decode($log->old_value ?? '');
+                $log->new_value = json_decode($log->new_value ?? '');
+                $log->host_name = trim(($log->firstname ?? '') . ' ' . ($log->lastname ?? ''));
+                return $log;
+            });
+
+            return $this->successResponse([
+                'logs' => $logs->getCollection(),
+                'pagination' => [
+                    'total' => $logs->total(),
+                    'per_page' => $logs->perPage(),
+                    'current_page' => $logs->currentPage(),
+                    'last_page' => $logs->lastPage(),
+                    'from' => $logs->firstItem(),
+                    'to' => $logs->lastItem(),
+                ]
+            ], 'Host activity log fetched successfully');
+        } else {
+            $logs = $query->get();
+            $logs->transform(function ($log) {
+                $log->old_value = json_decode($log->old_value ?? '');
+                $log->new_value = json_decode($log->new_value ?? '');
+                $log->host_name = trim(($log->firstname ?? '') . ' ' . ($log->lastname ?? ''));
+                return $log;
+            });
+
+            return $this->successResponse($logs, 'Host activity log fetched successfully');
         }
     }
 

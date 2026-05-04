@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\AdminApis\V1;
 
-use App\Http\Controllers\Controller; 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\{Customer, Coupon};
 use Illuminate\Support\Facades\Validator;
@@ -41,7 +41,8 @@ class CustomerDataController extends Controller
         // $this->cashfreeElectionApiUrl = config('global_values.cashfree_verification_test_url').'verification/voter-id';
     }
 
-    public function getCustomers(Request $request){
+    public function getCustomers(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
         $orderColumn = $request->order_column ?? '';
@@ -55,63 +56,63 @@ class CustomerDataController extends Controller
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
-        $customers = Customer::select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob', 'profile_picture_url', 'billing_address', 'shipping_address','device_token', 'device_id', 'is_deleted', 'is_blocked')->where('is_deleted', 0);
+        $customers = Customer::select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob', 'profile_picture_url', 'billing_address', 'shipping_address', 'device_token', 'device_id', 'is_deleted', 'is_blocked')->where('is_deleted', 0);
         if (!empty($request->customer_id)) {
             $customers = $customers->where('customer_id', $request->customer_id)->first();
             $customerStatus = $this->getCustomerStatus($customers);
             $customers->status = $customerStatus;
             return $customers ? $this->successResponse($customers, 'Customer details fetched successfully') : $this->errorResponse('Customer user not found');
         }
-        
-        if(isset($search) && $search != ''){
-            $checkCust = Customer::where('customer_id', (int)$search)->exists();
-            if($checkCust){
+
+        if (isset($search) && $search != '') {
+            $checkCust = Customer::where('customer_id', (int) $search)->exists();
+            if ($checkCust) {
                 $customers = $customers->where('customer_id', $search);
-            }
-            else{
+            } else {
                 $customers = $customers->where(function ($query) use ($search) {
-                $query->whereRaw('LOWER(country_code) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(mobile_number) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(email) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(firstname) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(lastname) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('CONCAT(firstname, " ", lastname) LIKE ?', ["%{$search}%"])
-                      ->orWhereRaw('CONCAT(lastname, " ", firstname) LIKE ?', ["%{$search}%"])
-                      ->orWhereRaw('LOWER(billing_address) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(device_token) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(device_id) LIKE LOWER(?)', ["%$search%"]);
+                    $query->whereRaw('LOWER(country_code) LIKE LOWER(?)', ["%$search%"])
+                        ->orWhereRaw('LOWER(mobile_number) LIKE LOWER(?)', ["%$search%"])
+                        ->orWhereRaw('LOWER(email) LIKE LOWER(?)', ["%$search%"])
+                        ->orWhereRaw('LOWER(firstname) LIKE LOWER(?)', ["%$search%"])
+                        ->orWhereRaw('LOWER(lastname) LIKE LOWER(?)', ["%$search%"])
+                        ->orWhereRaw('CONCAT(firstname, " ", lastname) LIKE ?', ["%{$search}%"])
+                        ->orWhereRaw('CONCAT(lastname, " ", firstname) LIKE ?', ["%{$search}%"])
+                        ->orWhereRaw('LOWER(billing_address) LIKE LOWER(?)', ["%$search%"])
+                        ->orWhereRaw('LOWER(device_token) LIKE LOWER(?)', ["%$search%"])
+                        ->orWhereRaw('LOWER(device_id) LIKE LOWER(?)', ["%$search%"]);
 
                     // Check if search input is a valid date format (DD-MM-YYYY)
                     if (preg_match('/^\d{2}-\d{2}-\d{4}$/', $search)) {
                         try {
                             $dobFormatted = \Carbon\Carbon::createFromFormat('d-m-Y', $search)->format('Y-m-d');
                             $query->orWhereDate('dob', $dobFormatted);
-                        } catch (\Exception $e) {}
+                        } catch (\Exception $e) {
+                        }
                     }
-                    if(strtolower($search) == 'bloked' || strtolower($search) == 'blocked'){
+                    if (strtolower($search) == 'bloked' || strtolower($search) == 'blocked') {
                         $query->orWhere('is_blocked', 1);
-                    }elseif(strtolower($search) == 'active' || strtolower($search) == 'unblocked'){
+                    } elseif (strtolower($search) == 'active' || strtolower($search) == 'unblocked') {
                         $query->orWhere('is_blocked', 0);
                     }
                 });
             }
         }
-    
-        if($orderColumn != '' && $orderType != ''){
+
+        if ($orderColumn != '' && $orderType != '') {
             $customers = $customers->orderBy($orderColumn, $orderType);
         }
         if ($page !== null && $pageSize !== null) {
             $customers = $customers->paginate($pageSize, ['*'], 'page', $page);
 
-            if(isset($customers) && is_countable($customers) && count($customers) > 0){
-                foreach($customers as $k => $v){
+            if (isset($customers) && is_countable($customers) && count($customers) > 0) {
+                foreach ($customers as $k => $v) {
                     $customerStatus = $this->getCustomerStatus($v);
                     $v->status = $customerStatus;
                 }
             }
-            
+
             $decodedAdmins = json_decode(json_encode($customers->getCollection()->values()), FALSE);
-    
+
             return $this->successResponse([
                 'customers' => $decodedAdmins,
                 'pagination' => [
@@ -121,11 +122,12 @@ class CustomerDataController extends Controller
                     'last_page' => $customers->lastPage(),
                     'from' => ($customers->currentPage() - 1) * $customers->perPage() + 1,
                     'to' => min($customers->currentPage() * $customers->perPage(), $customers->total()),
-                ]], 'Customers fetched successfully');
-        }else{
+                ]
+            ], 'Customers fetched successfully');
+        } else {
             $customers = $customers->get();
-            if(isset($customers) && is_countable($customers) && count($customers) > 0){
-                foreach($customers as $k => $v){
+            if (isset($customers) && is_countable($customers) && count($customers) > 0) {
+                foreach ($customers as $k => $v) {
                     $customerStatus = $this->getCustomerStatus($v);
                     $v->status = $customerStatus;
                 }
@@ -133,18 +135,19 @@ class CustomerDataController extends Controller
             $customers = [
                 'customers' => $customers,
             ];
-            if(isset($customers) && is_countable($customers) && count($customers) > 0){
+            if (isset($customers) && is_countable($customers) && count($customers) > 0) {
                 return $this->successResponse($customers, 'Customers fetched successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Customers users not found');
             }
         }
     }
 
-    private function getCustomerStatus($customers){
+    private function getCustomerStatus($customers)
+    {
         $cStatus = '';
-        if($customers != ''){
-            if($customers->is_blocked == 1)
+        if ($customers != '') {
+            if ($customers->is_blocked == 1)
                 $cStatus = 'Blocked';
             else
                 $cStatus = 'Active';
@@ -153,7 +156,8 @@ class CustomerDataController extends Controller
         return $cStatus;
     }
 
-    public function updateCustomer(Request $request){
+    public function updateCustomer(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'customer_id' => 'required|exists:customers,customer_id',
             'mobile_number' => [
@@ -192,10 +196,10 @@ class CustomerDataController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        if(isset($request->customer_id) && $request->customer_id != ''){
+        if (isset($request->customer_id) && $request->customer_id != '') {
             $customer = Customer::where('customer_id', $request->customer_id)->first();
             $oldVal = clone $customer;
-            if($customer != ''){
+            if ($customer != '') {
                 $customer->mobile_number = $request->mobile_number;
                 $customer->email = $request->email;
                 $customer->country_code = $request->country_code;
@@ -205,26 +209,22 @@ class CustomerDataController extends Controller
                 $customer->save();
                 $newVal = $customer;
 
-                $array1 = $oldVal->toArray();
-                $array2 = $newVal->toArray();
-                unset($array1['documents']);
-                unset($array2['documents']);
-                // Find differences between arrays
-                $differences = array_diff_assoc($array1, $array2);
-                if(isset($differences) && is_countable($differences) && count($differences) > 0){
+                $differences = compareArray($oldVal, $newVal);
+                if (isset($differences) && is_countable($differences) && count($differences) > 0) {
                     logAdminActivities('Customer Updation', $oldVal, $newVal);
                 }
 
                 return $this->successResponse($customer, 'Customer details are updated Successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Customer not Found');
             }
-        }else{
+        } else {
             return $this->errorResponse('Customer not Found');
         }
     }
 
-    public function deleteCustomer(Request $request){
+    public function deleteCustomer(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'customer_id' => 'required|exists:customers,customer_id',
         ]);
@@ -233,7 +233,7 @@ class CustomerDataController extends Controller
         }
 
         $customerId = $request->customer_id;
-        $customer = Customer::where('customer_id',  $customerId)->first();
+        $customer = Customer::where('customer_id', $customerId)->first();
         if ($customer == '') {
             return $this->errorResponse('Customer not Found');
         }
@@ -244,7 +244,8 @@ class CustomerDataController extends Controller
         return $this->successResponse($customer, 'Customer deleted successfully');
     }
 
-    public function resendMail(Request $request) {
+    public function resendMail(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'customer_id' => 'required|exists:customers,customer_id',
         ]);
@@ -253,24 +254,25 @@ class CustomerDataController extends Controller
         }
         $customerId = $request->customer_id;
         $customerDetails = Customer::select('customer_id', 'firstname', 'lastname', 'email', 'is_deleted', 'is_blocked')->where(['customer_id' => $customerId, 'is_deleted' => 0, 'is_blocked' => 0])->first();
-        if($customerDetails != '' && $customerDetails->email != ''){
+        if ($customerDetails != '' && $customerDetails->email != '') {
             $to = $customerDetails->email;
             $subject = "Email Verification";
             $from = config('global_values.mail_from');
             $customerId = Crypt::encrypt($customerDetails->customer_id);
             $name = $customerDetails->firstname ?? '';
-            $name .= ' '.$customerDetails->lastname ?? '';
+            $name .= ' ' . $customerDetails->lastname ?? '';
             $email = Crypt::encrypt($to);
             $app = Crypt::encrypt('v_main');
-            if(isset($to) && $to != ''){
-                try{
+            if (isset($to) && $to != '') {
+                try {
                     // Send Verification mail to Customer
                     Mail::send('emails.front.email_verification', ['customer_id' => $customerId, 'name' => $name, 'email' => $email, 'app' => $app], function ($m) use ($subject, $to, $from) {
                         $m->from($from)->to($to)->subject($subject);
                     });
-                } catch (\Exception $e) {} 
+                } catch (\Exception $e) {
+                }
                 return $this->successResponse($customerDetails, 'Customer mail send successfully');
-            }else {
+            } else {
                 return $this->errorResponse('Customer email not Found');
             }
         } else {
@@ -278,7 +280,8 @@ class CustomerDataController extends Controller
         }
     }
 
-    public function blockUnblockUser(Request $request){
+    public function blockUnblockUser(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'customer_id' => 'required|exists:customers,customer_id',
             'status' => 'required|in:1,0',
@@ -289,20 +292,20 @@ class CustomerDataController extends Controller
 
         $custId = $request->customer_id;
         $customer = Customer::find($custId);
-        $customer->is_blocked =  $request->status;
+        $customer->is_blocked = $request->status;
         $customer->save();
 
-        if($request->status == 1){
+        if ($request->status == 1) {
             logAdminActivities("Customer Block Activity", $customer);
             return $this->successResponse($customer, 'Customer blocked successfully');
-        }
-        else{
+        } else {
             logAdminActivities("Customer Un-Block Activity", $customer);
             return $this->successResponse($customer, 'Customer un-blocked successfully');
-        }   
+        }
     }
 
-    public function getCoupons(Request $request){
+    public function getCoupons(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
         $orderColumn = $request->order_column ?? '';
@@ -312,7 +315,7 @@ class CustomerDataController extends Controller
         $orderTypes = implode(',', $orderTypes);
         $validator = Validator::make($request->all(), [
             'id' => 'nullable|exists:coupons,id',
-            'order_type' => 'nullable|in:'.$orderTypes,
+            'order_type' => 'nullable|in:' . $orderTypes,
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
@@ -325,8 +328,8 @@ class CustomerDataController extends Controller
             $coupon->makeHidden('type');
             return $coupon ? $this->successResponse($coupon, 'Coupon details fetched successfully') : $this->errorResponse('Coupon not found');
         }
-        
-        if(isset($search) && $search != ''){
+
+        if (isset($search) && $search != '') {
             $coupons = $coupons->where(function ($query) use ($search) {
                 $query->whereRaw('LOWER(code) LIKE LOWER(?)', ["%$search%"])
                     ->orWhereRaw('LOWER(type) LIKE LOWER(?)', ["%$search%"])
@@ -335,13 +338,13 @@ class CustomerDataController extends Controller
             });
         }
 
-        if($orderColumn != '' && $orderType != ''){
+        if ($orderColumn != '' && $orderType != '') {
             $coupons = $coupons->orderBy($orderColumn, $orderType);
         }
         if ($page !== null && $pageSize !== null) {
             $coupons = $coupons->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($coupons) && is_countable($coupons) && count($coupons) > 0){
-                foreach($coupons as $key => $val){
+            if (isset($coupons) && is_countable($coupons) && count($coupons) > 0) {
+                foreach ($coupons as $key => $val) {
                     $val->discount_type = $val->type;
                     $val->makeHidden('type');
                 }
@@ -357,11 +360,12 @@ class CustomerDataController extends Controller
                     'last_page' => $coupons->lastPage(),
                     'from' => ($coupons->currentPage() - 1) * $coupons->perPage() + 1,
                     'to' => min($coupons->currentPage() * $coupons->perPage(), $coupons->total()),
-                ]], 'Coupons fetched successfully');
-        }else{
+                ]
+            ], 'Coupons fetched successfully');
+        } else {
             $coupons = $coupons->get();
-            if(isset($coupons) && is_countable($coupons) && count($coupons) > 0){
-                foreach($coupons as $key => $val){
+            if (isset($coupons) && is_countable($coupons) && count($coupons) > 0) {
+                foreach ($coupons as $key => $val) {
                     $val->discount_type = $val->type;
                     $val->makeHidden('type');
                 }
@@ -369,15 +373,16 @@ class CustomerDataController extends Controller
             $coupons = [
                 'coupons' => $coupons,
             ];
-            if(isset($coupons) && is_countable($coupons) && count($coupons) > 0){
+            if (isset($coupons) && is_countable($coupons) && count($coupons) > 0) {
                 return $this->successResponse($coupons, 'Coupons fetched successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Coupons are not found');
             }
         }
     }
 
-    public function setCouponStatus(Request $request){
+    public function setCouponStatus(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'status_type' => 'required|in:active,show,delete',
             'coupon_id' => 'required|exists:coupons,id',
@@ -387,52 +392,53 @@ class CustomerDataController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        if(isset($request->status_type) && $request->status_type != ''){
+        if (isset($request->status_type) && $request->status_type != '') {
             $coupon = Coupon::where('id', $request->coupon_id)->first();
-            if($coupon != ''){
+            if ($coupon != '') {
                 $msg = '';
-                if($request->status_type == 'active'){
-                    if($request->status == 1){
+                if ($request->status_type == 'active') {
+                    if ($request->status == 1) {
                         $coupon->is_active = 1;
                         $msg = "Coupon Activated Successfully";
                         $coupon->save();
-                    }elseif($request->status == 0){
+                    } elseif ($request->status == 0) {
                         $coupon->is_active = 0;
                         $msg = "Coupon In-Activated Successfully";
                         $coupon->save();
                     }
                     logAdminActivities($msg, $coupon);
                     return $this->successResponse($coupon, $msg);
-                }elseif($request->status_type == 'show'){   
-                    if($request->status == 1){
+                } elseif ($request->status_type == 'show') {
+                    if ($request->status == 1) {
                         $coupon->is_show = 1;
                         $msg = "Coupon Show Successfully";
                         $coupon->save();
-                    }elseif($request->status == 0){
+                    } elseif ($request->status == 0) {
                         $coupon->is_show = 0;
                         $msg = "Coupon Not Show Successfully";
                         $coupon->save();
                     }
                     logAdminActivities($msg, $coupon);
                     return $this->successResponse($coupon, $msg);
-                }elseif($request->status_type == 'delete'){
+                } elseif ($request->status_type == 'delete') {
                     $coupon->is_deleted = 1;
                     $coupon->save();
                     logAdminActivities("Coupon Code Deletion", $coupon);
                     return $this->successResponse($coupon, "Coupon deleted Successfully");
-                }    
-            }else{
-                return $this->errorResponse('Coupon not found');    
+                }
+            } else {
+                return $this->errorResponse('Coupon not found');
             }
-        }else{
+        } else {
             return $this->errorResponse('Invalid status type');
         }
     }
 
-    public function createOrUpdateCoupon(Request $request){
+    public function createOrUpdateCoupon(Request $request)
+    {
         $now = Carbon::now()->setTimezone('Asia/Kolkata');
-        $startDate = $request->filled('valid_from') ? Carbon::parse($request->valid_from)->format('Y-m-d H:i:s'): null;
-        $endDate = $request->filled('valid_to')? Carbon::parse($request->valid_to)->format('Y-m-d H:i:s'): null;
+        $startDate = $request->filled('valid_from') ? Carbon::parse($request->valid_from)->format('Y-m-d H:i:s') : null;
+        $endDate = $request->filled('valid_to') ? Carbon::parse($request->valid_to)->format('Y-m-d H:i:s') : null;
         // $validator = Validator::make(array_merge($request->all(), [
         //     'valid_from' => $startDate,
         //     'valid_to' => $endDate,
@@ -497,7 +503,7 @@ class CustomerDataController extends Controller
             : 'required|after:' . $now;
         $validator = Validator::make(array_merge($request->all(), [
             'valid_from' => $startDate,
-            'valid_to'   => $endDate,
+            'valid_to' => $endDate,
         ]), $rules);
 
         if ($validator->fails()) {
@@ -505,13 +511,13 @@ class CustomerDataController extends Controller
         }
 
         $oldVal = $newVal = '';
-        if(isset($request->coupon_id) && $request->coupon_id != ''){
+        if (isset($request->coupon_id) && $request->coupon_id != '') {
             $coupon = Coupon::where('id', $request->coupon_id)->first();
             $oldVal = clone $coupon;
-        }else{
+        } else {
             $coupon = new Coupon();
         }
-        $coupon->code = isset($request->code) ? $request->code :'';
+        $coupon->code = isset($request->code) ? $request->code : '';
         $coupon->type = isset($request->discount_type) ? $request->discount_type : '';
         $coupon->percentage_discount = isset($request->percentage_discount) ? $request->percentage_discount : 0;
         $coupon->max_discount_amount = isset($request->max_discount_amount) ? $request->max_discount_amount : 0;
@@ -519,28 +525,29 @@ class CustomerDataController extends Controller
         $coupon->customer_id = isset($request->customer_id) ? $request->customer_id : 0;
         $coupon->valid_from = $startDate;
         $coupon->valid_to = $endDate;
-        if(!isset($request->coupon_id) && $request->coupon_id == ''){
+        if (empty($request->coupon_id)) {
             $coupon->is_active = 1;
             $coupon->is_show = 0;
         }
-        $coupon->single_use_per_customer = isset($request->single_use_per_customer)?$request->single_use_per_customer:0;
-        $coupon->one_time_use_among_all = isset($request->one_time_use_among_all)?$request->one_time_use_among_all:0;
+        $coupon->single_use_per_customer = isset($request->single_use_per_customer) ? $request->single_use_per_customer : 0;
+        $coupon->one_time_use_among_all = isset($request->one_time_use_among_all) ? $request->one_time_use_among_all : 0;
         $coupon->save();
-            
-        if(isset($request->coupon_id) && $request->coupon_id != ''){
+
+        if (!empty($request->coupon_id)) {
             $newVal = $coupon;
             $differences = compareArray($oldVal, $newVal);
-            if(isset($differences) && is_countable($differences) && count($differences) > 0){
+            if (isset($differences) && is_countable($differences) && count($differences) > 0) {
                 logAdminActivities('Coupon Code Updation', $oldVal, $newVal);
             }
             return $this->successResponse($coupon, 'Coupon Updated successfully!');
-        }else{
+        } else {
             logAdminActivities("Coupon Code Creation", $coupon);
             return $this->successResponse($coupon, 'Coupon Created successfully!');
         }
     }
 
-    public function deleteCoupon(Request $request){
+    public function deleteCoupon(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'coupon_id' => 'required|exists:coupons,id',
         ]);

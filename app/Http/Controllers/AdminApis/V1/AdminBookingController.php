@@ -4,7 +4,7 @@ namespace App\Http\Controllers\AdminApis\V1;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\{Vehicle, Customer, CustomerDocument, AdminRentalBooking, RentalBooking, BookingTransaction, Payment, Refund, CancelRentalBooking, CustomerReferralDetails, Setting, OfferDate, AdminPenalty, RentalBookingImage, VehicleUpdateHistory};
+use App\Models\{Vehicle, Customer, CustomerDocument, AdminRentalBooking, RentalBooking, BookingTransaction, Payment, Refund, CancelRentalBooking, CustomerReferralDetails, Setting, OfferDate, AdminPenalty, RentalBookingImage, VehicleUpdateHistory, CompanyDetail};
 use App\Rules\CheckCoupon;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
@@ -99,6 +99,11 @@ class AdminBookingController extends Controller
             $rentalBooking = $rentalBooking->whereHas('vehicle.model', function ($q) use ($modelId) {
                 $q->where('model_id', $modelId);
             });
+        }
+        if ($request->assigned_by != '') {
+            if (\Schema::hasColumn('rental_bookings', 'admin_id')) {
+                $rentalBooking = $rentalBooking->where('admin_id', $request->assigned_by);
+            }
         }
         // Filter by Pickup and Return date
         if ($request->pickup_date != '' && $request->return_date != '') {
@@ -323,7 +328,7 @@ class AdminBookingController extends Controller
 
         $adminPenaltyAmount = $exceededHourPenalty = 0;
         $penaltyInfo = $adminPenaltyId = '';
-        $adminPenalties = AdminPenalty::where(['booking_id' => $request->booking_id, 'is_paid' => 0])->where('amount', '>', 0)->first();
+        $adminPenalties = AdminPenalty::where(['booking_id' => $request->booking_id, 'is_paid' => 0])->where('amount', '!=', 0)->first();
         if ($adminPenalties != '') {
             $adminPenaltyAmount = $adminPenalties->amount ?? 0;
             $penaltyInfo = $adminPenalties->penalty_details ?? '';
@@ -554,7 +559,7 @@ class AdminBookingController extends Controller
             'vehicle_id' => 'nullable|exists:vehicles,vehicle_id',
             'start_kilometer' => 'nullable',
             'end_kilometer' => 'nullable',
-            'penalty_amount' => 'nullable|numeric|min:0|max:99999999.99',
+            'penalty_amount' => 'nullable|numeric|max:99999999.99',
             'penalty_details' => 'nullable|max:500|string|regex:/[a-zA-Z]/',
             'booking_id' => 'nullable|exists:rental_bookings,booking_id',
             'get_penalty' => 'nullable|exists:rental_bookings,booking_id',
@@ -736,22 +741,24 @@ class AdminBookingController extends Controller
                 if ($customer->is_blocked) {
                     return $this->errorResponse("Customer is blocked can not generate OTP");
                 }
+                $oldObject = clone $rentalBooking;
+
                 $rentalBooking->start_otp = $startOtp;
                 $rentalBooking->save();
 
-                $storeObject = clone $rentalBooking;
-                $storeObject->startotp = $startOtp;
-                logAdminActivities("Generate Start OTP at Booking List", $storeObject);
+                $newObject = clone $rentalBooking;
+                logAdminActivities("Generate Start OTP at Booking List", $oldObject, $newObject);
 
                 return $this->successResponse($startOtp, 'Start OTP sent successfully' . $startOtp);
             } elseif ($request->update_flag == 'end_otp') {
                 $endOtp = mt_rand(1000, 9999);
+                $oldObject = clone $rentalBooking;
+
                 $rentalBooking->end_otp = $endOtp;
                 $rentalBooking->save();
 
-                $storeObject = clone $rentalBooking;
-                $storeObject->endotp = $endOtp;
-                logAdminActivities("Generate end OTP at Booking List", $storeObject);
+                $newObject = clone $rentalBooking;
+                logAdminActivities("Generate end OTP at Booking List", $oldObject, $newObject);
 
                 return $this->successResponse($endOtp, 'End OTP sent successfully ' . $endOtp);
             } elseif ($request->update_flag == 'get_price_summary') {
@@ -948,6 +955,18 @@ class AdminBookingController extends Controller
         $rentalBooking->total_cost = 0;
         $rentalBooking->status = 'confirmed';
         $rentalBooking->rental_type = $request->rental_type ?? 'default';
+        if (\Schema::hasColumn('rental_bookings', 'admin_id')) {
+            $rentalBooking->admin_id = auth()->guard('admin')->user()->admin_id ?? null;
+        }
+
+        // Fetch latest booking for the vehicle to set start_kilometers
+        $lastBooking = AdminRentalBooking::where('vehicle_id', $request->vehicle)
+            ->whereNotNull('end_kilometers')
+            ->orderBy('return_date', 'desc')
+            ->first();
+        $startKilometers = $lastBooking ? $lastBooking->end_kilometers : 0;
+        $rentalBooking->start_kilometers = $startKilometers;
+
         $rentalBooking->save();
 
         $customerGst = '';
@@ -970,8 +989,38 @@ class AdminBookingController extends Controller
         if (is_countable($checkOffer) && count($checkOffer) > 0) {
             $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
         }
-        $tripAmt = $request->trip_amt_txt ?? 0;
-        $calculationDetails = $rentalBooking->computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $request->input('unlimited_km', false), $request->coupon_code, $startDate, $endDate, $typeId, null, 'new_booking', $customerId, $request->payment_mode, $request->ref_number, $vehicleCommissionPercent, $taxRate, $tripAmt, 0, $vehicle->vehicle_id);
+
+        $tripAmt = NULL;
+        if ($request->trip_amt_status == 1) {
+            $tripAmt = $request->trip_amt_txt;
+        }
+        $unlimitedStatus = $request->unlimited_status ?? 0;
+        $unlimitedKm = $request->unlimited_km ?? 0;
+        $finalAmtStatus = $request->final_amt_status ?? 0;
+        $finalAmt = $request->final_amount ?? 0;
+
+        $calculationDetails = $rentalBooking->computeRentalCostDetails(
+            $rentalPrice,
+            $tripDurationMinutes,
+            $unlimitedKm,
+            $request->coupon_code,
+            $startDate,
+            $endDate,
+            $typeId,
+            false,
+            'new_booking',
+            $customerId,
+            $request->payment_mode,
+            $request->ref_number,
+            $vehicleCommissionPercent,
+            $taxRate,
+            $tripAmt,
+            $unlimitedStatus,
+            $vehicle->vehicle_id,
+            1,
+            $finalAmtStatus,
+            $finalAmt
+        );
 
         $rentalBooking->total_cost = $calculationDetails['total_amount'];
         $finalAmount = $calculationDetails['final_amount'];
@@ -1051,22 +1100,30 @@ class AdminBookingController extends Controller
             'booking_start_date' => 'required|date',
             'booking_end_date' => 'required|date|after:start_date',
             'coupon_code' => ['nullable', 'string', 'exists:coupons,code', new CheckCoupon()],
-            'trip_amt_status' => 'required|in:0,1', //0 means event occurs when any changes are made on customer OR Vehicle OR Start & End Date time, 1 Means Trip Amount get changed manually
+            'trip_amt_status' => 'required|in:0,1',
+            'final_amt_status' => 'nullable|in:0,1', //0 means normal calculation, 1 means final amount manually entered
             'trip_amount' => 'nullable',
+            'final_amount' => 'nullable',
             'unlimited_status' => 'nullable',
             'unlimited_km' => 'nullable',
         ]);
         $validator->sometimes(['trip_amount'], 'required', function ($input) {
             return isset($input->trip_amt_status) && $input->trip_amt_status == 1;
         });
+        $validator->sometimes(['final_amount'], 'required', function ($input) {
+            return isset($input->final_amt_status) && $input->final_amt_status == 1;
+        });
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
 
         $tripAmt = NULL;
-        if ($request->trip_amt_status == 1) { //tripAmtStatus = 0 means event occurs when any changes are made on customer OR Vehicle OR Start & End Date time 
+        if ($request->trip_amt_status == 1) {
             $tripAmt = $request->trip_amount;
         }
+        $finalAmtStatus = $request->final_amt_status ?? 0;
+        $finalAmt = $request->final_amount ?? 0;
+
         $unlimitedKm = 0;
         $customerId = $request->customer_id ?? '';
         $vehicleId = $request->vehicle_id ?? '';
@@ -1135,7 +1192,7 @@ class AdminBookingController extends Controller
             $taxRate = $customerGst ? 0.18 : 0.05;
             $unlimitedStatus = $request->unlimited_status ?? 0;
             $unlimitedKm = $request->unlimited_km ?? 0;
-            $calculationDetails = $rentalBooking->computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $unlimitedKm, $couponCode, $startDate, $endDate, $typeId, false, 'new_booking', $customerId, NULL, NULL, $vehicleCommissionPercent, $taxRate, $tripAmt, $unlimitedStatus, $vehicleId);
+            $calculationDetails = $rentalBooking->computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $unlimitedKm, $couponCode, $startDate, $endDate, $typeId, false, 'new_booking', $customerId, NULL, NULL, $vehicleCommissionPercent, $taxRate, $tripAmt, $unlimitedStatus, $vehicleId, 1, $finalAmtStatus, $finalAmt);
             $vehicleTypeName = $vehicle->model->category->vehicleType->name ?? null;
             $kmLimit = calculateKmLimit($tripDurationHours, $vehicleTypeName);
             $warning = $unlimitedKm ? '' : "Your journey is limited to " . (int) $kmLimit . " km. Exceeding this limit will incur additional charges at ₹" . $vehicle->extra_km_rate . " per km.";
@@ -1156,8 +1213,25 @@ class AdminBookingController extends Controller
         }
 
         $bookingTransaction = '';
-        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle', 'payment'])->where('booking_id', $request->booking_id)->first();
-        if ($rentalBookingDetails != '') {
+        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle.vehicleEligibility.carHost', 'payment'])->where('booking_id', $request->booking_id)->first();
+        if ($rentalBookingDetails) {
+            $providerAddress = '';
+            if ($rentalBookingDetails->vehicle && $rentalBookingDetails->vehicle->vehicleEligibility && $rentalBookingDetails->vehicle->vehicleEligibility->carHost) {
+                $providerAddress = $rentalBookingDetails->vehicle->vehicleEligibility->carHost->billing_address;
+            }
+
+            if (empty($providerAddress)) {
+                $companyDetail = CompanyDetail::first();
+                $providerAddress = $companyDetail ? $companyDetail->address : '';
+            }
+
+            if ($rentalBookingDetails->customer) {
+                $rentalBookingDetails->customer->billing_address = $providerAddress;
+            }
+            $rentalBookingDetails->owner_billing_address = $providerAddress;
+
+            $rentalBookingDetails->penalty_info = $this->getPenaltyInfo($rentalBookingDetails->booking_id);
+
             $bookingTransaction = BookingTransaction::select('booking_id', 'additional_charges', 'additional_charges_info', 'late_return', 'exceeded_km_limit')->where(['booking_id' => $rentalBookingDetails->booking_id, 'type' => 'completion', 'paid' => 0])->first();
         }
         $vehicles = Vehicle::select('vehicle_id', 'license_plate', 'model_id')->where('availability', 1)->where('is_deleted', 0)->where('vehicle_id', '!=', $rentalBookingDetails->vehicle_id)->with('model.category.vehicleType:type_id,name')->get();
@@ -1177,15 +1251,14 @@ class AdminBookingController extends Controller
         if (is_countable($rentalBookingDetails->price_summary) && count($rentalBookingDetails->price_summary) > 0) {
             $cDetails = [];
             foreach ($rentalBookingDetails->price_summary as $k => $v) {
-                //$cDetails[$v['key']] = $v['value'];
                 $cDetails[] = [
                     'key' => $v['key'],
                     'value' => $v['value'],
                 ];
-                $rentalBookingDetails->cDetails = $cDetails;
             }
+            $rentalBookingDetails->cDetails = $cDetails;
         } else {
-            $rentalBookingDetails->cDetails = '';
+            $rentalBookingDetails->cDetails = [];
         }
 
         $bookingId = $request->booking_id ?? '';
@@ -1246,6 +1319,7 @@ class AdminBookingController extends Controller
 
         $data = [
             'rentalBookingDetails' => $rentalBookingDetails,
+            'owner_billing_address' => $rentalBookingDetails->owner_billing_address ?? '',
             // 'vehicles' => $vehicles,
             'currentDate' => $currentDate,
             'returnDate' => $returnDate,
@@ -2036,6 +2110,11 @@ class AdminBookingController extends Controller
             $cancelRentalBooking->hours_diffrence = $diffInHours;
             $cancelRentalBooking->refund_percent = $refundPercent;
             $cancelRentalBooking->refund_amount = $refundAmount;
+            $cancelRentalBooking->data_json = [
+                'cancel_reason' => $request->cancel_reason ?? null,
+                'cancelled_by' => auth()->guard('admin')->user()->admin_id ?? null,
+                'cancelled_by_name' => auth()->guard('admin')->user()->username ?? 'Admin'
+            ];
             $cancelRentalBooking->save();
             $rBooking = AdminRentalBooking::where('booking_id', $bookingId)->first();
             if ($rBooking != '') {

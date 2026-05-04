@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\AdminApis\V1;
 
-use App\Http\Controllers\Controller; 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\{Vehicle, Customer, CustomerDocument, AdminRentalBooking, RentalBooking, BookingTransaction, Payment, Refund, CancelRentalBooking, CustomerReferralDetails, Setting, OfferDate, AdminPenalty, RentalBookingImage,VehicleUpdateHistory};
+use App\Models\{Vehicle, Customer, CustomerDocument, AdminRentalBooking, RentalBooking, BookingTransaction, Payment, Refund, CancelRentalBooking, CustomerReferralDetails, Setting, OfferDate, AdminPenalty, RentalBookingImage, VehicleUpdateHistory};
 use App\Rules\CheckCoupon;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
@@ -39,11 +39,12 @@ class AdminBookingController extends Controller
         // $this->cashfreeElectionApiUrl = config('global_values.cashfree_verification_test_url').'verification/voter-id';
     }
 
-    public function getBookingDropdownData(Request $request){
+    public function getBookingDropdownData(Request $request)
+    {
         $details = [];
         $paymentModes = config('global_values.payment_modes');
-        if(isset($vehicleArr) && is_countable($vehicleArr) && count($vehicleArr) > 0){
-            $vehicleArr->makeHidden(['cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating', 'total_rating', 'trip_count', 'location']); 
+        if (isset($vehicleArr) && is_countable($vehicleArr) && count($vehicleArr) > 0) {
+            $vehicleArr->makeHidden(['cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating', 'total_rating', 'trip_count', 'location']);
         }
         $bookingStatuses = config('global_values.booking_statuses');
         $details['paymentModes'] = $paymentModes;
@@ -52,7 +53,8 @@ class AdminBookingController extends Controller
         return $this->successResponse($details, 'Admin activity Log fetched successfully');
     }
 
-    public function getBookings(Request $request){
+    public function getBookings(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
         $orderColumn = $request->order_column ?? '';
@@ -64,11 +66,11 @@ class AdminBookingController extends Controller
         $statusIds = array_column($bookingStatuses, 'id');
         $statues = implode(',', $statusIds);
         $validator = Validator::make($request->all(), [
-            'status' => 'nullable|in:'.$statues,
+            'status' => 'nullable|in:' . $statues,
             'booking_id' => 'nullable|exists:rental_bookings,booking_id',
             'customer_id' => 'nullable|exists:customers,customer_id',
             'vehicle_id' => 'nullable|exists:vehicles,vehicle_id',
-            'order_type' => 'nullable|in:'.$orderTypes,
+            'order_type' => 'nullable|in:' . $orderTypes,
             'pickup_date' => 'nullable|date',
             'return_date' => 'nullable|date|after:pickup_date',
             'start_date' => 'nullable|date',
@@ -80,46 +82,46 @@ class AdminBookingController extends Controller
         }
 
         $rentalBooking = AdminRentalBooking::with(['customer', 'vehicle']);
-        if($request->status && strtolower($request->status) != 'all' && $request->status != ''){
+        if ($request->status && strtolower($request->status) != 'all' && $request->status != '') {
             $rentalBooking = $rentalBooking->where('status', $request->status);
         }
-        if($request->booking_id != ''){
+        if ($request->booking_id != '') {
             $rentalBooking = $rentalBooking->where('booking_id', $request->booking_id);
         }
-        if($request->customer_id != ''){
+        if ($request->customer_id != '') {
             $rentalBooking = $rentalBooking->where('customer_id', $request->customer_id);
         }
-        if($request->vehicle_id != ''){
+        if ($request->vehicle_id != '') {
             $rentalBooking = $rentalBooking->where('vehicle_id', $request->vehicle_id);
         }
-        if($request->model_id != ''){
+        if ($request->model_id != '') {
             $modelId = $request->model_id;
-            $rentalBooking = $rentalBooking->whereHas('vehicle.model', function($q) use($modelId){
+            $rentalBooking = $rentalBooking->whereHas('vehicle.model', function ($q) use ($modelId) {
                 $q->where('model_id', $modelId);
             });
         }
         // Filter by Pickup and Return date
-        if($request->pickup_date != '' && $request->return_date != ''){
+        if ($request->pickup_date != '' && $request->return_date != '') {
             $startDate = Carbon::parse($request->pickup_date)->format('Y-m-d');
             $endDate = Carbon::parse($request->return_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->where('pickup_date', '>=', $startDate)->where('return_date', '<=', $endDate);
-        }elseif($request->pickup_date != ''){
+        } elseif ($request->pickup_date != '') {
             $startDate = Carbon::parse($request->pickup_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->whereDate('pickup_date', $startDate);
-        }elseif($request->return_date != ''){
+        } elseif ($request->return_date != '') {
             $endDate = Carbon::parse($request->return_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->whereDate('return_date', $endDate);
         }
 
         // Filter by Start and End date
-        if($request->start_date != '' && $request->end_date != ''){
+        if ($request->start_date != '' && $request->end_date != '') {
             $startDate = Carbon::parse($request->start_date)->format('Y-m-d');
             $endDate = Carbon::parse($request->end_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->whereDate('start_datetime', '>=', $startDate)->whereDate('end_datetime', '<=', $endDate);
-        }elseif($request->start_date != ''){
+        } elseif ($request->start_date != '') {
             $startDate = Carbon::parse($request->start_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->whereDate('start_datetime', $startDate);
-        }elseif($request->end_date != ''){
+        } elseif ($request->end_date != '') {
             $endDate = Carbon::parse($request->end_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->whereDate('end_datetime', $endDate);
         }
@@ -135,7 +137,7 @@ class AdminBookingController extends Controller
 
         if ($page !== null && $pageSize !== null) {
             $bookingDetails = $rentalBooking->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($bookingDetails) && is_countable($bookingDetails) && count($bookingDetails) > 0){
+            if (isset($bookingDetails) && is_countable($bookingDetails) && count($bookingDetails) > 0) {
                 $bookingDetails->makeHidden(['calculation_details', 'start_images', 'end_images', 'price_summary', 'admin_button_visibility', 'location']);
                 $bookingDetails->each(function ($booking) {
                     $booking->start_journey_otp_status = $this->getStartJourneyOtpStatus($booking->booking_id);
@@ -147,28 +149,28 @@ class AdminBookingController extends Controller
                     $booking->end_kilometers = $booking->end_kilometers != '' && $booking->end_kilometers != null ? $booking->end_kilometers : 0;
                     // $booking->is_start_kilometers_show = $booking->status == 'confirmed' || $booking->status == 'running' ? true : false;
                     // $booking->is_end_kilometers_show = $booking->status == 'running' ? true : false;
-                    if($booking->customer){
-                        $booking->customer->makeHidden('billing_address','business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'passbook_image_url');
+                    if ($booking->customer) {
+                        $booking->customer->makeHidden('billing_address', 'business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'passbook_image_url');
                     }
-                    if($booking->vehicle){
-                       $booking->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'rental_price','extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'rating','total_rating', 'trip_count', 'location');
+                    if ($booking->vehicle) {
+                        $booking->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'rating', 'total_rating', 'trip_count', 'location');
                     }
 
                     $booking->otp_text = getOtpText($booking->booking_id);
-                    if($booking->start_journey_otp_status == false){
+                    if ($booking->start_journey_otp_status == false) {
                         $getStartOtpText = getStartOtpText($booking->booking_id);
                         $booking->start_journey_otp_text = $getStartOtpText;
-                    }else{
+                    } else {
                         $booking->start_journey_otp_text = '';
                     }
-                    if($booking->end_journey_otp_text == false){
+                    if ($booking->end_journey_otp_text == false) {
                         $getEndOtpText = getEndOtpText($booking->booking_id);
                         $booking->end_journey_otp_text = $getEndOtpText;
-                    }else{
+                    } else {
                         $booking->end_journey_otp_text = '';
                     }
-                });  
-            } 
+                });
+            }
             $decodedBookings = json_decode(json_encode($bookingDetails->getCollection()->values()), FALSE);
             return $this->successResponse([
                 'rental_bookings' => $decodedBookings,
@@ -179,10 +181,11 @@ class AdminBookingController extends Controller
                     'last_page' => $bookingDetails->lastPage(),
                     'from' => ($bookingDetails->currentPage() - 1) * $bookingDetails->perPage() + 1,
                     'to' => min($bookingDetails->currentPage() * $bookingDetails->perPage(), $bookingDetails->total()),
-                ]], 'Bookings are get successfully');
-        }else{
+                ]
+            ], 'Bookings are get successfully');
+        } else {
             $rentalBooking = $rentalBooking->get();
-            if(isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0){
+            if (isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0) {
                 $rentalBooking->makeHidden(['calculation_details', 'start_images', 'end_images', 'price_summary', 'admin_button_visibility', 'location']);
                 $rentalBooking->each(function ($booking) {
                     $booking->start_journey_otp_status = $this->getStartJourneyOtpStatus($booking->booking_id);
@@ -192,60 +195,62 @@ class AdminBookingController extends Controller
                     $booking->penalty_info = $this->getPenaltyInfo($booking->booking_id);
                     // $booking->is_start_kilometers_show = $booking->status == 'confirmed' || $booking->status == 'running' ? true : false;
                     // $booking->is_end_kilometers_show = $booking->status == 'running' ? true : false;
-                    if($booking->customer){
-                        $booking->customer->makeHidden('billing_address','business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'passbook_image_url');
+                    if ($booking->customer) {
+                        $booking->customer->makeHidden('billing_address', 'business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'passbook_image_url');
                     }
-                    if($booking->vehicle){
-                       $booking->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'rental_price','extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'rating','total_rating', 'trip_count', 'location');
+                    if ($booking->vehicle) {
+                        $booking->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'rating', 'total_rating', 'trip_count', 'location');
                     }
 
                     $booking->otp_text = getOtpText($booking->booking_id);
-                    if($booking->start_journey_otp_status == false){
+                    if ($booking->start_journey_otp_status == false) {
                         $getStartOtpText = getStartOtpText($booking->booking_id);
                         $booking->start_journey_otp_text = $getStartOtpText;
-                    }else{
+                    } else {
                         $booking->start_journey_otp_text = '';
                     }
-                    if($booking->end_journey_otp_text == false){
+                    if ($booking->end_journey_otp_text == false) {
                         $getEndOtpText = getEndOtpText($booking->booking_id);
                         $booking->end_journey_otp_text = $getEndOtpText;
-                    }else{
+                    } else {
                         $booking->end_journey_otp_text = '';
                     }
-                });  
-            } 
+                });
+            }
             $rentalBooking = [
                 'rental_bookings' => $rentalBooking,
             ];
-            if(isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0){
+            if (isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0) {
                 return $this->successResponse($rentalBooking, 'Bookings are get successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Bookings are not found');
             }
         }
     }
 
-    protected function getPenaltyInfo($bookingId){
+    protected function getPenaltyInfo($bookingId)
+    {
         $adminPenalty = AdminPenalty::where('booking_id', $bookingId)->where('is_paid', 0)->orderBy('created_at', 'desc')->first();
         $data['penalty_amount'] = $adminPenalty->amount ?? 0;
         $data['penalty_details'] = $adminPenalty->penalty_details ?? '';
-        
+
         return $data;
     }
 
-    public function searchBooking(Request $request){
+    public function searchBooking(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
         $search = $request->search ?? '';
 
         $bookings = AdminRentalBooking::select('booking_id');
-        if(isset($search) && $search != ''){
+        if (isset($search) && $search != '') {
             $bookings->whereRaw('booking_id LIKE ?', ["%$search%"]);
         }
         if ($page !== null && $pageSize !== null) {
             $bookings = $bookings->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($bookings) && is_countable($bookings) && count($bookings) > 0){
-                foreach($bookings as $key => $val){
+            if (isset($bookings) && is_countable($bookings) && count($bookings) > 0) {
+                foreach ($bookings as $key => $val) {
                     $val->makeHidden('admin_button_visibility', 'price_summary', 'end_images', 'start_images');
                 }
             }
@@ -259,20 +264,21 @@ class AdminBookingController extends Controller
                     'last_page' => $bookings->lastPage(),
                     'from' => ($bookings->currentPage() - 1) * $bookings->perPage() + 1,
                     'to' => min($bookings->currentPage() * $bookings->perPage(), $bookings->total()),
-                ]], 'Bookings fetched successfully');
-        }else{
+                ]
+            ], 'Bookings fetched successfully');
+        } else {
             $bookings = $bookings->get();
-            if(isset($bookings) && is_countable($bookings) && count($bookings) > 0){
-                foreach($bookings as $key => $val){
+            if (isset($bookings) && is_countable($bookings) && count($bookings) > 0) {
+                foreach ($bookings as $key => $val) {
                     $val->makeHidden('admin_button_visibility', 'price_summary', 'end_images', 'start_images');
                 }
             }
             $bookings = [
                 'bookings' => $bookings,
             ];
-            if(isset($bookings) && is_countable($bookings) && count($bookings) > 0){
+            if (isset($bookings) && is_countable($bookings) && count($bookings) > 0) {
                 return $this->successResponse($bookings, 'Bookings fetched successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Bookings are not found');
             }
         }
@@ -280,7 +286,8 @@ class AdminBookingController extends Controller
         return $this->successResponse($bookings, 'Booking Ids are get Successfully');
     }
 
-    public function getPenaltyDetails(Request $request){
+    public function getPenaltyDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'booking_id' => 'required|exists:rental_bookings,booking_id',
             'end_km' => 'required|integer|min:1|regex:/^\d{1,7}$/',
@@ -294,11 +301,11 @@ class AdminBookingController extends Controller
         $data['admin_penalty_id'] = '';
         $data['exceed_km_limit'] = '';
         $data['exceed_hour_limit'] = '';
-        $booking = RentalBooking::select('booking_id', 'customer_id', 'end_otp', 'vehicle_id' ,'end_datetime', 'pickup_date', 'return_date', 'unlimited_kms', 'start_kilometers', 'end_kilometers', 'start_datetime', 'end_datetime', 'status', 'rental_duration_minutes')->where('booking_id', $request->booking_id)->first();
+        $booking = RentalBooking::select('booking_id', 'customer_id', 'end_otp', 'vehicle_id', 'end_datetime', 'pickup_date', 'return_date', 'unlimited_kms', 'start_kilometers', 'end_kilometers', 'start_datetime', 'end_datetime', 'status', 'rental_duration_minutes')->where('booking_id', $request->booking_id)->first();
         if (!$booking) {
             return $this->errorResponse('Invalid Booking');
         }
-        if(isset($request->end_km) && $request->end_km != '' && $request->end_km <= $booking->start_kilometers){
+        if (isset($request->end_km) && $request->end_km != '' && $request->end_km <= $booking->start_kilometers) {
             return $this->errorResponse("Please enter an End Kilometer value higher than the Start Kilometer.");
         }
         // $booking->end_kilometers = $request->end_km ?? 0;
@@ -317,11 +324,11 @@ class AdminBookingController extends Controller
         $adminPenaltyAmount = $exceededHourPenalty = 0;
         $penaltyInfo = $adminPenaltyId = '';
         $adminPenalties = AdminPenalty::where(['booking_id' => $request->booking_id, 'is_paid' => 0])->where('amount', '>', 0)->first();
-        if($adminPenalties != ''){
+        if ($adminPenalties != '') {
             $adminPenaltyAmount = $adminPenalties->amount ?? 0;
-            $penaltyInfo = $adminPenalties->penalty_details ?? '';    
+            $penaltyInfo = $adminPenalties->penalty_details ?? '';
             $adminPenaltyId = $adminPenalties->id;
-        }  
+        }
         // Calculate penalties based on trip duration and distance
         $pickupDateTime = Carbon::parse($booking->pickup_date);
         $returnDateTime = Carbon::parse($booking->return_date);
@@ -332,7 +339,7 @@ class AdminBookingController extends Controller
             $kilometerLimit = calculateKmLimit($tripDurationHours, $vehicleTypeName);
             //$kilometerDifference = $booking->end_kilometers - $booking->start_kilometers;
             $kilometerDifference = $endKilometers - $booking->start_kilometers;
-            $exceededKilometerPenalty = max(0, ($kilometerDifference - $kilometerLimit) * ($booking->vehicle->extra_km_rate ?? 0));    
+            $exceededKilometerPenalty = max(0, ($kilometerDifference - $kilometerLimit) * ($booking->vehicle->extra_km_rate ?? 0));
         }
         // $actualTripDurationMinutes = Carbon::parse($booking->end_datetime)->diffInMinutes($booking->start_datetime);
         // $endDateTime = Carbon::parse($booking->end_datetime);
@@ -342,32 +349,33 @@ class AdminBookingController extends Controller
             // If end_datetime is greater than return_date, calculate the exceeded minutes
             $exceededMinutes = $endDateTime->diffInMinutes($returnDateTime);
             $exceededHourPenalty = max(0, ($exceededMinutes * ($booking->vehicle->extra_hour_rate ?? 0) / 60));
-            if($booking && $booking->unlimited_kms == 1){
+            if ($booking && $booking->unlimited_kms == 1) {
                 $exceededHourPenalty = ($exceededHourPenalty * 1.3);
             }
         }
-    
+
         // Calculate final penalty and refundable amount
         $data['admin_penalty'] = round($adminPenaltyAmount);
         $data['admin_penalty_info'] = $penaltyInfo;
         $data['admin_penalty_id'] = $adminPenaltyId;
         $data['exceed_km_limit'] = round($exceededKilometerPenalty);
         $data['exceed_hour_limit'] = round($exceededHourPenalty);
-            
+
         return $this->successResponse($data, "Penalty details are get successfully");
     }
 
-    protected function getStartJourneyOtpStatus($bookingId){
+    protected function getStartJourneyOtpStatus($bookingId)
+    {
         $startJourneyOtpStatus = $vehicleTypeStatus = false;
         $booking = AdminRentalBooking::where('booking_id', $bookingId)->first();
         $checkVehicleType = CustomerDocument::where(['customer_id' => $booking->customer_id, 'document_type' => 'dl', 'is_approved' => 'approved'])->first();
         $vehicleType = $checkVehicleType->vehicle_type ?? '';
         $vehicleType = explode('/', $vehicleType);
         $selectedVehicleType = strtolower($booking->vehicle->model->category->vehicleType->name);
-        if(in_array($selectedVehicleType, $vehicleType)){
+        if (in_array($selectedVehicleType, $vehicleType)) {
             $vehicleTypeStatus = true;
         }
-        if($booking != ''){
+        if ($booking != '') {
             $currentDate = Carbon::now()->setTimezone('Asia/Kolkata');
             $pickupDate = Carbon::parse($booking->pickup_date);
             $returnDate = Carbon::parse($booking->return_date);
@@ -377,20 +385,21 @@ class AdminBookingController extends Controller
                 $startJourneyOtpStatus = true;
             }
         }
-        return  $startJourneyOtpStatus;
+        return $startJourneyOtpStatus;
     }
 
-    protected function getEndJourneyOtpStatus($bookingId){
+    protected function getEndJourneyOtpStatus($bookingId)
+    {
         $endJourneyOtpStatus = false;
         $checkBookingStatus = AdminRentalBooking::select('booking_id', 'status', 'customer_id')->where('booking_id', $bookingId)->first();
-        if(strtolower($checkBookingStatus->status) == 'running'){
+        if (strtolower($checkBookingStatus->status) == 'running') {
             // Check if previous booking has any penalties are remaining to paid or not
             $duePenalties = false;
-            $getBooking = AdminRentalBooking::where('customer_id', $checkBookingStatus->customer_id)->get(); 
-            if(isset($getBooking) && is_countable($getBooking) && count($getBooking) > 0){
-                foreach($getBooking as $key => $val){
+            $getBooking = AdminRentalBooking::where('customer_id', $checkBookingStatus->customer_id)->get();
+            if (isset($getBooking) && is_countable($getBooking) && count($getBooking) > 0) {
+                foreach ($getBooking as $key => $val) {
                     $checkOtherBookingsDuePenalties = BookingTransaction::where(['booking_id' => $val->booking_id, 'type' => 'penalty', 'paid' => 0])->where('total_amount', '>', 0)->where('final_amount', '>', 0)->exists();
-                    if($checkOtherBookingsDuePenalties){
+                    if ($checkOtherBookingsDuePenalties) {
                         $duePenalties = true;
                         break;
                     }
@@ -398,30 +407,33 @@ class AdminBookingController extends Controller
             }
             // Check if booking is not completed
             $calcDetails = BookingTransaction::where(['booking_id' => $bookingId, 'type' => 'completion', 'is_deleted' => 0, 'paid' => 1])->exists();
-            if(!$calcDetails && !$duePenalties){
+            if (!$calcDetails && !$duePenalties) {
                 $endJourneyOtpStatus = true;
             }
         }
-        return  $endJourneyOtpStatus;
+        return $endJourneyOtpStatus;
     }
 
-    protected function getAddPenaltyStatus($status){
+    protected function getAddPenaltyStatus($status)
+    {
         $penltyStatus = true;
-        if(strtolower($status) == 'pending' || strtolower($status) == 'confirmed'){
+        if (strtolower($status) == 'pending' || strtolower($status) == 'confirmed') {
             $penltyStatus = false;
         }
         return $penltyStatus;
     }
 
-    protected function getAddPenaltyText($status){
+    protected function getAddPenaltyText($status)
+    {
         $penaltyText = 'Add Penalty';
-        if(strtolower($status) == 'pending' || strtolower($status) == 'confirmed'){
+        if (strtolower($status) == 'pending' || strtolower($status) == 'confirmed') {
             $penaltyText = 'You can not add due to this booking is not started yet';
         }
         return $penaltyText;
     }
 
-    public function exportBookings(Request $request){
+    public function exportBookings(Request $request)
+    {
         $data = [];
         $orderColumn = $request->order_column ?? '';
         $orderType = $request->order_type ?? '';
@@ -432,11 +444,11 @@ class AdminBookingController extends Controller
         $statusIds = array_column($bookingStatuses, 'id');
         $statues = implode(',', $statusIds);
         $validator = Validator::make($request->all(), [
-            'status' => 'nullable|in:'.$statues,
+            'status' => 'nullable|in:' . $statues,
             'booking_id' => 'nullable|exists:rental_bookings,booking_id',
             'customer_id' => 'nullable|exists:customers,customer_id',
             'vehicle_id' => 'nullable|exists:vehicles,vehicle_id',
-            'order_type' => 'nullable|in:'.$orderTypes,
+            'order_type' => 'nullable|in:' . $orderTypes,
             'pickup_date' => 'nullable|date',
             'return_date' => 'nullable|date',
             'is_blocked' => 'nullable|boolean',
@@ -445,26 +457,26 @@ class AdminBookingController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $rentalBooking = AdminRentalBooking::with(['customer', 'vehicle']);
-        if($request->status && strtolower($request->status) != 'all' && $request->status != ''){
+        if ($request->status && strtolower($request->status) != 'all' && $request->status != '') {
             $rentalBooking = $rentalBooking->where('status', $request->status);
         }
-        if($request->booking_id != ''){
+        if ($request->booking_id != '') {
             $rentalBooking = $rentalBooking->where('booking_id', $request->booking_id);
         }
-        if($request->customer_id != ''){
+        if ($request->customer_id != '') {
             $rentalBooking = $rentalBooking->where('customer_id', $request->customer_id);
         }
-        if($request->vehicle_id != ''){
+        if ($request->vehicle_id != '') {
             $rentalBooking = $rentalBooking->where('vehicle_id', $request->vehicle_id);
         }
-        if($request->pickup_date != '' && $request->return_date != ''){
+        if ($request->pickup_date != '' && $request->return_date != '') {
             $startDate = Carbon::parse($request->pickup_date)->format('Y-m-d H:i');
             $endDate = Carbon::parse($request->return_date)->format('Y-m-d H:i');
             $rentalBooking = $rentalBooking->where('pickup_date', '>=', $startDate)->where('return_date', '<=', $endDate);
-        }elseif($request->pickup_date != ''){
+        } elseif ($request->pickup_date != '') {
             $startDate = Carbon::parse($request->pickup_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->whereDate('pickup_date', $startDate);
-        }elseif($request->return_date != ''){
+        } elseif ($request->return_date != '') {
             $endDate = Carbon::parse($request->return_date)->format('Y-m-d');
             $rentalBooking = $rentalBooking->whereDate('return_date', $endDate);
         }
@@ -475,16 +487,16 @@ class AdminBookingController extends Controller
             });
         }
         $rentalBooking = $rentalBooking->get();
-        if(isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0){
+        if (isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0) {
             $rentalBooking->makeHidden(['calculation_details', 'start_images', 'end_images', 'price_summary', 'admin_button_visibility', 'location']);
             $rentalBooking->each(function ($booking) {
-                if($booking->customer){
-                    $booking->customer->makeHidden('profile_picture_url','billing_address','business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'email_verified_at', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'documents', 'passbook_image_url');
+                if ($booking->customer) {
+                    $booking->customer->makeHidden('profile_picture_url', 'billing_address', 'business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'email_verified_at', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'documents', 'passbook_image_url');
                 }
-                if($booking->vehicle){
-                    $booking->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'rental_price','extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating','total_rating', 'trip_count', 'location');
+                if ($booking->vehicle) {
+                    $booking->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating', 'total_rating', 'trip_count', 'location');
                 }
-            });  
+            });
         }
         $headers = [
             ['key' => 'booking_id', 'name' => 'Booking Id'],
@@ -497,10 +509,10 @@ class AdminBookingController extends Controller
             ['key' => 'rental_type', 'name' => 'Rental Type'],
             ['key' => 'status', 'name' => 'Status'],
         ];
-        
+
         $allData = [];
-        if(isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0){
-            foreach($rentalBooking as $k => $v){
+        if (isset($rentalBooking) && is_countable($rentalBooking) && count($rentalBooking) > 0) {
+            foreach ($rentalBooking as $k => $v) {
                 $customerDetails = $vehicleDetails = $taxDetails = '';
                 if (!empty($v) && !empty($v->customer)) {
                     $customerDetails = 'Name: ' . (($v->customer->firstname ?? '') . ' ' . ($v->customer->lastname ?? ''));
@@ -533,7 +545,8 @@ class AdminBookingController extends Controller
         return $this->successResponse($allDetails, 'Data get successfully');
     }
 
-    public function getOrUpdateBookingInfo(Request $request){
+    public function getOrUpdateBookingInfo(Request $request)
+    {
         $bookingInfoUpdateFlag = config('global_values.booking_info_update_flag');
         $bookingInfoUpdateFlag = implode(',', $bookingInfoUpdateFlag);
         $validator = Validator::make($request->all(), [
@@ -541,11 +554,11 @@ class AdminBookingController extends Controller
             'vehicle_id' => 'nullable|exists:vehicles,vehicle_id',
             'start_kilometer' => 'nullable',
             'end_kilometer' => 'nullable',
-            'penalty_amount' => 'nullable|numeric|min:0|max:99999999.99',
+            'penalty_amount' => 'nullable|numeric|max:99999999.99',
             'penalty_details' => 'nullable|max:500|string|regex:/[a-zA-Z]/',
             'booking_id' => 'nullable|exists:rental_bookings,booking_id',
             'get_penalty' => 'nullable|exists:rental_bookings,booking_id',
-            'update_flag' => 'required|in:'.$bookingInfoUpdateFlag,
+            'update_flag' => 'required|in:' . $bookingInfoUpdateFlag,
         ]);
         $validator->sometimes(['customer_id'], 'required', function ($input) {
             return $input->update_flag == 'get_customer_bookings';
@@ -578,97 +591,97 @@ class AdminBookingController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        if(isset($request->update_flag) && $request->update_flag != ''){
+        if (isset($request->update_flag) && $request->update_flag != '') {
             $bookingId = $request->booking_id;
             $rentalBooking = AdminRentalBooking::where('booking_id', $bookingId)->first();
             $currentDate = Carbon::now()->setTimezone('Asia/Kolkata');
-            $returnDate = isset($rentalBooking->return_date)?Carbon::parse($rentalBooking->return_date):'';
-            if($request->update_flag ==  'get_customer_bookings'){
+            $returnDate = isset($rentalBooking->return_date) ? Carbon::parse($rentalBooking->return_date) : '';
+            if ($request->update_flag == 'get_customer_bookings') {
                 $customerId = $request->customer_id;
                 $rentalBookings = $customerInfo = '';
                 $details = [];
-                if($customerId != ''){
-                    $rentalBookings = AdminRentalBooking::where('customer_id', $customerId)->with('vehicle')->get();   
+                if ($customerId != '') {
+                    $rentalBookings = AdminRentalBooking::where('customer_id', $customerId)->with('vehicle')->get();
                     $customerDetails = Customer::where('customer_id', $customerId)->first();
-                    if($customerDetails->firstname != null && $customerDetails->firstname != null){
-                        $customerInfo .= '<div class="col-md-3"><b>Name - </b>'.$customerDetails->firstname .' '.$customerDetails->lastname.'</div> | ';
+                    if ($customerDetails->firstname != null && $customerDetails->firstname != null) {
+                        $customerInfo .= '<div class="col-md-3"><b>Name - </b>' . $customerDetails->firstname . ' ' . $customerDetails->lastname . '</div> | ';
                     }
-                    if($customerDetails->email != null){
-                        $customerInfo .= '<div class="col-md-3"><b>Email - </b>' . $customerDetails->email.'</div> | ';
+                    if ($customerDetails->email != null) {
+                        $customerInfo .= '<div class="col-md-3"><b>Email - </b>' . $customerDetails->email . '</div> | ';
                     }
-                    if($customerDetails->mobile_number != null){
-                        $customerInfo .= '<div class="col-md-3"><b>Mobile No. - </b>' . $customerDetails->mobile_number.'</div>';
+                    if ($customerDetails->mobile_number != null) {
+                        $customerInfo .= '<div class="col-md-3"><b>Mobile No. - </b>' . $customerDetails->mobile_number . '</div>';
                     }
                     $rentalBookings->makeHidden(['initial_vehicle_id', 'location_id', 'location_from', 'calculation_details', 'start_images', 'end_images', 'price_summary', 'admin_button_visibility', 'location', 'data_json', 'unlimited_kms', 'total_cost', 'amount_paid', 'penalty_details', 'start_otp', 'end_otp', 'tax_rate']);
                     $rentalBookings->each(function ($booking) {
-                        if($booking->vehicle){
-                            $booking->customer->makeHidden('profile_picture_url','billing_address','business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'email_verified_at', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'documents', 'passbook_image_url');
+                        if ($booking->vehicle) {
+                            $booking->customer->makeHidden('profile_picture_url', 'billing_address', 'business_name', 'gst_number', 'shipping_address', 'is_deleted', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'email_verified_at', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'documents', 'passbook_image_url');
                         }
-                    }); 
+                    });
                     $details['bookings'] = $rentalBookings;
                     $details['customerDetails'] = $customerInfo;
                     return $this->successResponse($details, 'Data get successfully');
                 }
-            }elseif($request->update_flag ==  'get_vehicle_bookings'){
+            } elseif ($request->update_flag == 'get_vehicle_bookings') {
                 $vehicleId = $request->vehicle_id;
                 $rentalBookings = $vehicleInfo = '';
                 $details = [];
-                if($vehicleId != ''){
-                    $rentalBookings = AdminRentalBooking::where('vehicle_id', $vehicleId)->get();   
+                if ($vehicleId != '') {
+                    $rentalBookings = AdminRentalBooking::where('vehicle_id', $vehicleId)->get();
                     $vehicleDetails = Vehicle::where('vehicle_id', $vehicleId)->first();
-                    if($vehicleDetails->vehicle_name != null && $vehicleDetails->vehicle_name != null){
-                        $vehicleInfo .= '<div class="col-md-3"><b>Vehicle Name - </b>'.$vehicleDetails->vehicle_name .'</div> | ';
+                    if ($vehicleDetails->vehicle_name != null && $vehicleDetails->vehicle_name != null) {
+                        $vehicleInfo .= '<div class="col-md-3"><b>Vehicle Name - </b>' . $vehicleDetails->vehicle_name . '</div> | ';
                     }
-                    if($vehicleDetails->color != null){
-                        $vehicleInfo .= '<div class="col-md-3"><b>Color - </b>' . $vehicleDetails->color.'</div> | ';
+                    if ($vehicleDetails->color != null) {
+                        $vehicleInfo .= '<div class="col-md-3"><b>Color - </b>' . $vehicleDetails->color . '</div> | ';
                     }
-                    if($vehicleDetails->license_plate != null){
-                        $vehicleInfo .= '<div class="col-md-3"><b>License Plate No. - </b>' . $vehicleDetails->license_plate.'</div>';
+                    if ($vehicleDetails->license_plate != null) {
+                        $vehicleInfo .= '<div class="col-md-3"><b>License Plate No. - </b>' . $vehicleDetails->license_plate . '</div>';
                     }
                     $rentalBookings->makeHidden(['initial_vehicle_id', 'location_id', 'location_from', 'calculation_details', 'start_images', 'end_images', 'price_summary', 'admin_button_visibility', 'location', 'data_json', 'unlimited_kms', 'total_cost', 'amount_paid', 'penalty_details', 'start_otp', 'end_otp', 'tax_rate']);
                     $rentalBookings->each(function ($booking) {
-                        $booking->customer->makeHidden('profile_picture_url','billing_address','business_name', 'gst_number', 'shipping_address', 'is_deleted', 'is_blocked', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'email_verified_at', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'documents', 'passbook_image_url');
+                        $booking->customer->makeHidden('profile_picture_url', 'billing_address', 'business_name', 'gst_number', 'shipping_address', 'is_deleted', 'is_blocked', 'device_token', 'device_id', 'gauth_id', 'gauth_type', 'email_verified_at', 'is_test_user', 'is_guest_user', 'my_referral_code', 'used_referral_code', 'account_holder_name', 'bank_name', 'branch_name', 'city', 'account_no', 'ifsc_code', 'nick_name', 'registered_via', 'documents', 'passbook_image_url');
                     });
                     $details['bookings'] = $rentalBookings;
                     $details['vehicleDetails'] = $vehicleInfo;
                     return $this->successResponse($details, 'Data get successfully');
                 }
-            }elseif($request->update_flag ==  'update_start_km'){
-                if($rentalBooking != ''){
+            } elseif ($request->update_flag == 'update_start_km') {
+                if ($rentalBooking != '') {
                     $rentalBooking->start_kilometers = $request->start_kilometer;
                     $rentalBooking->save();
                     $object = clone $rentalBooking;
                     logAdminActivities("Start Kilometers Value Updated In Booking History", $object);
-                    
+
                     return $this->successResponse($rentalBooking, 'Data saved successfully');
                 }
-            }elseif($request->update_flag ==  'update_end_km'){
-                if($rentalBooking != ''){
-                    if(isset($request->end_kilometer) && $request->end_kilometer != '' && $request->end_kilometer <= $rentalBooking->start_kilometers){
+            } elseif ($request->update_flag == 'update_end_km') {
+                if ($rentalBooking != '') {
+                    if (isset($request->end_kilometer) && $request->end_kilometer != '' && $request->end_kilometer <= $rentalBooking->start_kilometers) {
                         return $this->errorResponse("Please enter an End Kilometer value higher than the Start Kilometer.");
                     }
                     $rentalBooking->end_kilometers = $request->end_kilometer;
                     $rentalBooking->save();
                     $object = clone $rentalBooking;
                     logAdminActivities("End Kilometers Value Updated In Booking History", $object);
-                    
+
                     return $this->successResponse($rentalBooking, 'Data saved successfully');
                 }
-            }elseif($request->update_flag === 'get_penalty'){
+            } elseif ($request->update_flag === 'get_penalty') {
                 $data['penalty_amt'] = 0;
                 $data['penalty_info'] = '';
-                if($rentalBooking != '' && $rentalBooking->penalty_details != NULL){
+                if ($rentalBooking != '' && $rentalBooking->penalty_details != NULL) {
                     $penaltyInfo = json_decode($rentalBooking->penalty_details);
                     $data['penalty_amt'] = $penaltyInfo->amount;
                     $data['penalty_info'] = $penaltyInfo->penalty_details;
                 }
                 return $this->successResponse($data, 'Penalty details are get Successfully');
-            }elseif($request->update_flag ==  'add_penalty'){
+            } elseif ($request->update_flag == 'add_penalty') {
                 $payableAmt = $request->penalty_amount ?? 0;
-                $taxAmt = 0; 
+                $taxAmt = 0;
                 $adminPenalty = AdminPenalty::where('booking_id', $bookingId)->where('is_paid', 0)->first();
-                if($adminPenalty == ''){
-                    $adminPenalty = new AdminPenalty();    
+                if ($adminPenalty == '') {
+                    $adminPenalty = new AdminPenalty();
                 }
                 $vehicleCommissionPercent = $rentalBooking->vehicle->commission_percent ?? 0;
                 $vehicleCommissionPercent = round($vehicleCommissionPercent);
@@ -676,9 +689,9 @@ class AdminBookingController extends Controller
                 $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
                 //$payableAmt += round($vehicleCommissionTaxAmt);
                 $taxRate = $rentalBooking->tax_rate ?? 0;
-                if($taxRate <= 0){
+                if ($taxRate <= 0) {
                     $user = Customer::where('customer_id', $rentalBooking->customer_id)->first();
-                    $customerGst = $user->gst_number ?? '';    
+                    $customerGst = $user->gst_number ?? '';
                     $taxRate = $customerGst ? 0.18 : 0.05;
                 }
                 $taxAmt = $payableAmt * $taxRate;
@@ -689,8 +702,8 @@ class AdminBookingController extends Controller
                 $adminPenalty->save();
 
                 $bookingTransaction = BookingTransaction::where(['booking_id' => $rentalBooking->booking_id, 'type' => 'penalty', 'paid' => 0])->first();
-                if($bookingTransaction == ''){
-                    $bookingTransaction = new BookingTransaction();    
+                if ($bookingTransaction == '') {
+                    $bookingTransaction = new BookingTransaction();
                 }
                 $final_amt = $payableAmt + $taxAmt;
                 $final_amt = round($final_amt);
@@ -715,12 +728,12 @@ class AdminBookingController extends Controller
                 $object->penalty = $penalty;
 
                 logAdminActivities("Admin Penalty Added", $object);
-                
+
                 return $this->successResponse($rentalBooking, 'Penalty details are added successfully');
-            }elseif($request->update_flag == 'start_otp'){
+            } elseif ($request->update_flag == 'start_otp') {
                 $startOtp = mt_rand(1000, 9999);
                 $customer = Customer::find($rentalBooking->customer_id);
-                if($customer->is_blocked) {
+                if ($customer->is_blocked) {
                     return $this->errorResponse("Customer is blocked can not generate OTP");
                 }
                 $rentalBooking->start_otp = $startOtp;
@@ -730,8 +743,8 @@ class AdminBookingController extends Controller
                 $storeObject->startotp = $startOtp;
                 logAdminActivities("Generate Start OTP at Booking List", $storeObject);
 
-                return $this->successResponse($startOtp, 'Start OTP sent successfully'.$startOtp);
-            }elseif($request->update_flag == 'end_otp'){
+                return $this->successResponse($startOtp, 'Start OTP sent successfully' . $startOtp);
+            } elseif ($request->update_flag == 'end_otp') {
                 $endOtp = mt_rand(1000, 9999);
                 $rentalBooking->end_otp = $endOtp;
                 $rentalBooking->save();
@@ -740,113 +753,108 @@ class AdminBookingController extends Controller
                 $storeObject->endotp = $endOtp;
                 logAdminActivities("Generate end OTP at Booking List", $storeObject);
 
-                return $this->successResponse($endOtp, 'End OTP sent successfully '. $endOtp);
-            }elseif($request->update_flag == 'get_price_summary'){
+                return $this->successResponse($endOtp, 'End OTP sent successfully ' . $endOtp);
+            } elseif ($request->update_flag == 'get_price_summary') {
                 $html = '';
-                $finalPrice = 0; $updatedKey = '';     
-                if(is_countable($rentalBooking->price_summary) && count($rentalBooking->price_summary) > 0){
+                $finalPrice = 0;
+                $updatedKey = '';
+                if (is_countable($rentalBooking->price_summary) && count($rentalBooking->price_summary) > 0) {
                     $html = '';
-                    foreach ($rentalBooking->price_summary as $key => $item){
-                        if(strtolower($item['key']) == 'final amount'){
+                    foreach ($rentalBooking->price_summary as $key => $item) {
+                        if (strtolower($item['key']) == 'final amount') {
                             $cleanedPrice = str_replace(['₹', ','], '', $item['value']);
                             $finalPrice += $cleanedPrice;
                         }
-                        if(strtolower($item['key']) == 'refundable deposit used'){
+                        if (strtolower($item['key']) == 'refundable deposit used') {
                             $cleanedPrice = str_replace(['₹', ','], '', $item['value']);
                             $finalPrice += $cleanedPrice;
                         }
-                        if($key == 0){
+                        if ($key == 0) {
                             $position = strpos($item['key'], "Amount");
                             if ($position !== false) {
                                 $position += strlen("Amount");
                                 $firstPart = 'Trip Amount';
                                 $secondPart = substr($item['key'], $position);
                                 $secondPart = str_replace('From', '<br/>From', $secondPart);
-                                $updatedKey = $firstPart.'<br/>'.$secondPart;
+                                $updatedKey = $firstPart . '<br/>' . $secondPart;
                             }
-                        }
-                        else{
+                        } else {
                             $updatedKey = $item['key'];
                         }
-                        if(strtolower($item['key']) == 'final amount'){
-                            $html .= '<strong>Final Price: </strong>₹'.round($finalPrice).'<br/>';
+                        if (strtolower($item['key']) == 'final amount') {
+                            $html .= '<strong>Final Price: </strong>₹' . round($finalPrice) . '<br/>';
+                        } else {
+                            $html .= '<strong>' . $updatedKey . ': </strong>' . $item['value'] . '<br/>';
                         }
-                        else{
-                            $html .= '<strong>'.$updatedKey.': </strong>'.$item['value'].'<br/>';
-                        } 
                     }
                 }
                 return $this->successResponse($html, "Price sumary get Successfully");
-            }elseif($request->update_flag == 'get_booking_operation'){
+            } elseif ($request->update_flag == 'get_booking_operation') {
                 // END BUTTON VISIBILLITY CONDITION - Booking status == 'running' || status == 'penalty_paid' && !end_journey_otp_status"
                 $startJourneyButtonText = $forcefullyStartJourneyButtonText = $extendJourneyButtonText = $forcefullyEndJourneyButtonText = $forcefullyextendJourneyButtonText = $endJourneyButtonText = $cancelBookingButtonText = $forcefullyCancelBookingButtonText = $startJourneyTooltipText = $startJourneyForceFullyLabelText = $extendJourneyTooltipText = $extendJourneyForceFullyLabelText = $endJourneyTooltipText = $endJourneyForceFullyLabelText = $cancelBookingForceFullyLabelText = $cancelBookingTooltipText = '';
                 $startJourneyButtonStatus = $extendJourneyButtonStatus = $endJourneyButtonStatus = $cancelBookingButtonStatus = $startJourneyForceFullyLabelStatus = $extendJourneyForceFullyLabelStatus = $endJourneyForceFullyLabelStatus = $cancelJourneyForceFullyLabelStatus = $extendJourneyTooltipStatus = false;
                 $data = [];
                 // STRAT JOURNEY
-                if($rentalBooking->admin_button_visibility['start_journey_button'] == 1 && $returnDate != '' && $currentDate < $returnDate){
+                if ($rentalBooking->admin_button_visibility['start_journey_button'] == 1 && $returnDate != '' && $currentDate < $returnDate) {
                     $startJourneyButtonText = 'Start Journey';
                     $startJourneyButtonStatus = true;
-                }
-                elseif(strtolower($rentalBooking->status) == 'running'){
+                } elseif (strtolower($rentalBooking->status) == 'running') {
                     $startJourneyButtonText = 'Journey Started';
-                }
-                else{
+                } else {
                     $startJourneyButtonText = "You can't Start the Journey";
-                    if(strtolower($rentalBooking->status) != 'completed'){
+                    if (strtolower($rentalBooking->status) != 'completed') {
                         $startJourneyTooltipText = "You can start the journey only if this user's Government ID & Driver's License (DL) documents are approved, AND the booking pickup time is within 30 minutes of the current time AND Customer email must be verified";
                     }
                 }
-                if(strtolower($rentalBooking->status) != 'running' && strtolower($rentalBooking->status) != 'completed' && strtolower($rentalBooking->status) != 'pending'){
+                if (strtolower($rentalBooking->status) != 'running' && strtolower($rentalBooking->status) != 'completed' && strtolower($rentalBooking->status) != 'pending') {
                     $startJourneyForceFullyLabelText = 'Forcefully allow Start Journey';
                     $startJourneyForceFullyLabelStatus = true;
                     $forcefullyStartJourneyButtonText = 'Start Journey';
                 }
                 // EXTEND JOURNEY
-                if($rentalBooking->admin_button_visibility['end_journey_button'] == 1){
+                if ($rentalBooking->admin_button_visibility['end_journey_button'] == 1) {
                     $extendJourneyButtonText = 'Extend Booking';
                     $extendJourneyButtonStatus = true;
-                }else{
+                } else {
                     $extendJourneyButtonText = "You can't able to Extend Booking this booking";
-                    if(strtolower($rentalBooking->status) != 'completed'){
+                    if (strtolower($rentalBooking->status) != 'completed') {
                         $extendJourneyTooltipText = "You can extend the booking only if the user has started their journey and uploaded up to 5 images of the journey's start AND Return date must be greater than current date";
                         $extendJourneyTooltipStatus = true;
                     }
                 }
-                if($rentalBooking->admin_button_visibility['end_journey_button'] != 1 && strtolower($rentalBooking->status) != 'completed' && strtolower($rentalBooking->status) != 'confirmed' && strtolower($rentalBooking->status) != 'pending'){
+                if ($rentalBooking->admin_button_visibility['end_journey_button'] != 1 && strtolower($rentalBooking->status) != 'completed' && strtolower($rentalBooking->status) != 'confirmed' && strtolower($rentalBooking->status) != 'pending') {
                     $extendJourneyForceFullyLabelText = "Forcefully allow Extension";
                     $extendJourneyForceFullyLabelStatus = true;
                     $forcefullyextendJourneyButtonText = 'Extend Booking';
                 }
                 // END JOURNEY
-                if($rentalBooking->admin_button_visibility['end_journey_button'] == 1){
+                if ($rentalBooking->admin_button_visibility['end_journey_button'] == 1) {
                     $endJourneyButtonText = "End Journey";
                     $endJourneyButtonStatus = true;
-                }
-                elseif(strtolower($rentalBooking->status) == 'completed'){
+                } elseif (strtolower($rentalBooking->status) == 'completed') {
                     $endJourneyButtonText = "Journey Ended";
-                }
-                else{
+                } else {
                     $endJourneyButtonText = "You can't End this Journey";
-                    if(strtolower($rentalBooking->status) != 'completed'){
+                    if (strtolower($rentalBooking->status) != 'completed') {
                         $endJourneyTooltipText = "You can End this Journey only if the user has started their journey and uploaded up to 5 images of the journey's start";
                     }
                 }
-                if($rentalBooking->admin_button_visibility['end_journey_button'] != 1 && strtolower($rentalBooking->status) != 'completed' && strtolower($rentalBooking->status) != 'confirmed' && strtolower($rentalBooking->status) != 'pending'){
+                if ($rentalBooking->admin_button_visibility['end_journey_button'] != 1 && strtolower($rentalBooking->status) != 'completed' && strtolower($rentalBooking->status) != 'confirmed' && strtolower($rentalBooking->status) != 'pending') {
                     $endJourneyForceFullyLabelText = "Forcefully allow End Journey";
                     $endJourneyForceFullyLabelStatus = true;
                     $forcefullyEndJourneyButtonText = "End Journey";
                 }
                 // CANCEL JOURNEY
-                if(strtolower($rentalBooking['status']) == 'confirmed' && $rentalBooking['pickup_date'] > now()->format('Y-m-d H:i')){
+                if (strtolower($rentalBooking['status']) == 'confirmed' && $rentalBooking['pickup_date'] > now()->format('Y-m-d H:i')) {
                     $cancelBookingButtonText = "Cancel Booking";
                     $cancelBookingButtonStatus = true;
-                }elseif(strtolower($rentalBooking['status']) == 'canceled'){
+                } elseif (strtolower($rentalBooking['status']) == 'canceled') {
                     $cancelBookingButtonText = "This booking is Canceled";
-                }else{
+                } else {
                     $cancelBookingButtonText = "You can't Cancel this Booking";
                     $cancelBookingTooltipText = "You can Cancel this booking if Booking status is Confirmed and Pickup date is greater than the Current Date";
                 }
-                if(strtolower($rentalBooking['status']) != 'pending' && strtolower($rentalBooking['status']) != 'no show' && strtolower($rentalBooking['status']) != 'completed' && strtolower($rentalBooking['status']) != 'failed' && strtolower($rentalBooking['status']) != 'canceled'){
+                if (strtolower($rentalBooking['status']) != 'pending' && strtolower($rentalBooking['status']) != 'no show' && strtolower($rentalBooking['status']) != 'completed' && strtolower($rentalBooking['status']) != 'failed' && strtolower($rentalBooking['status']) != 'canceled') {
                     $cancelBookingForceFullyLabelText = "Forcefully allow Cancel Booking";
                     $cancelJourneyForceFullyLabelStatus = true;
                     $forcefullyCancelBookingButtonText = "Cancel Booking";
@@ -877,39 +885,41 @@ class AdminBookingController extends Controller
                 $cancelJourneyForceFullyLabelStatus = true;
                 $data['cancelJourneyForceFullyLabelStatus'] = $cancelJourneyForceFullyLabelStatus;
                 $data['forcefullyCancelBookingButtonText'] = $forcefullyCancelBookingButtonText;
-                
+
                 return $this->successResponse($data, "Booking Operation details are get Successfully");
             }
-        }else{
+        } else {
             return $this->errorResponse('Please select Update Flag');
         }
     }
 
-    public function getBookingInfoUpdateFlag(Request $request){
+    public function getBookingInfoUpdateFlag(Request $request)
+    {
         $bookingInfoUpdateFlag = config('global_values.booking_info_update_flag');
-        if(isset($bookingInfoUpdateFlag) && is_countable($bookingInfoUpdateFlag) && count($bookingInfoUpdateFlag) > 0){
+        if (isset($bookingInfoUpdateFlag) && is_countable($bookingInfoUpdateFlag) && count($bookingInfoUpdateFlag) > 0) {
             return $this->successResponse($bookingInfoUpdateFlag, 'Please select Update Flag');
-        }else{
+        } else {
             return $this->errorResponse('Please select Update Flag');
         }
     }
 
-    public function addBooking(Request $request){
+    public function addBooking(Request $request)
+    {
         $paymentModes = config('global_values.payment_modes');
         $paymentModes = implode(',', $paymentModes);
-        
+
         $validator = Validator::make($request->all(), [
             'customer' => 'required|exists:customers,customer_id',
             'vehicle' => 'required|exists:vehicles,vehicle_id',
             'booking_start_date' => 'required|date',
             'booking_end_date' => 'required|date|after:booking_start_date',
-            'coupon_code' => ['nullable','string','exists:coupons,code',new CheckCoupon()],
+            'coupon_code' => ['nullable', 'string', 'exists:coupons,code', new CheckCoupon()],
             'ref_number' => 'required',
-            'payment_mode' => 'required|in:'.$paymentModes,
+            'payment_mode' => 'required|in:' . $paymentModes,
             'unlimited_km' => 'nullable',
             'trip_amt_txt' => 'nullable',
         ]);
-         if ($validator->fails()) {
+        if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
 
@@ -918,7 +928,7 @@ class AdminBookingController extends Controller
         $endDate = Carbon::parse($request->booking_end_date);
         // Check if Vehicle host has restricted this vehicle to book in Night time or not
         $checkVehicleInNightTime = checkVehicleInNightTime($vehicle, $startDate, $endDate);
-        if($checkVehicleInNightTime == false){
+        if ($checkVehicleInNightTime == false) {
             return $this->errorResponse('You can not book this vehicle between 12 AM and 6 AM.');
         }
         $tripDurationMinutes = $endDate->diffInMinutes($startDate);
@@ -942,22 +952,22 @@ class AdminBookingController extends Controller
 
         $customerGst = '';
         $user = Customer::where('customer_id', $customerId)->first();
-        $customerGst = $user->gst_number ?? '';    
+        $customerGst = $user->gst_number ?? '';
         $taxRate = $customerGst ? 0.18 : 0.05;
         $rentalBooking->tax_rate = $taxRate;
         $rentalBooking->save();
 
-        if($rentalBooking->vehicle_id != ''){
+        if ($rentalBooking->vehicle_id != '') {
             $responseDetails = getLocationDetails($rentalBooking->vehicle_id);
-            if($responseDetails != null){
-                $rentalBooking->location_id = (int)$responseDetails['id'] ?? null;
-                $rentalBooking->location_from = $responseDetails['from'] ?? null;    
+            if ($responseDetails != null) {
+                $rentalBooking->location_id = (int) $responseDetails['id'] ?? null;
+                $rentalBooking->location_from = $responseDetails['from'] ?? null;
                 $rentalBooking->save();
             }
         }
         $rentalPrice = $vehicle->rental_price;
         $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
-        if(is_countable($checkOffer) && count($checkOffer) > 0){
+        if (is_countable($checkOffer) && count($checkOffer) > 0) {
             $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
         }
         $tripAmt = $request->trip_amt_txt ?? 0;
@@ -966,7 +976,7 @@ class AdminBookingController extends Controller
         $rentalBooking->total_cost = $calculationDetails['total_amount'];
         $finalAmount = $calculationDetails['final_amount'];
         $rentalBooking->save();
-        
+
         $bookingTransaction = new BookingTransaction();
         $bookingTransaction->booking_id = $rentalBooking->booking_id;
         $bookingTransaction->timestamp = now()->toDateTimeString();
@@ -992,7 +1002,7 @@ class AdminBookingController extends Controller
         $bookingTransaction->razorpay_payment_id = '';
         $bookingTransaction->cashfree_order_id = '';
         $bookingTransaction->cashfree_payment_session_id = '';
-        $bookingTransaction->vehicle_commission_amount = $calculationDetails['vehicle_commission_amt'] ?? 0 ;
+        $bookingTransaction->vehicle_commission_amount = $calculationDetails['vehicle_commission_amt'] ?? 0;
         $bookingTransaction->vehicle_commission_tax_amt = $calculationDetails['vehicle_commission_tax_amt'] ?? 0;
         $bookingTransaction->save();
 
@@ -1002,43 +1012,45 @@ class AdminBookingController extends Controller
         $payment->amount = $finalAmount;
         $payment->payment_date = now()->toDateString();
         $payment->status = 'captured';
-        $payment->payment_mode = $request->payment_mode; 
-        $payment->transaction_ref_number = $request->ref_number; 
+        $payment->payment_mode = $request->payment_mode;
+        $payment->transaction_ref_number = $request->ref_number;
         $payment->save();
-        
-        try{
+
+        try {
             $customerReferralDetails = CustomerReferralDetails::where(['customer_id' => $customerId, 'reward_type' => 2, 'is_paid' => 0])->whereNull('payable_amount')->first();
-            if($customerReferralDetails != '' && $bookingTransaction->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0){
+            if ($customerReferralDetails != '' && $bookingTransaction->final_amount > 0 && $customerReferralDetails->reward_amount_or_percent > 0) {
                 $setting = Setting::select('id', 'reward_max_discount_amount')->first();
                 $payAmt = 0;
-                $percent = (float)$customerReferralDetails->reward_amount_or_percent;
-                $amount = (float)$bookingTransaction->final_amount;
-                if($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0){
-                    $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);  
+                $percent = (float) $customerReferralDetails->reward_amount_or_percent;
+                $amount = (float) $bookingTransaction->final_amount;
+                if ($customerReferralDetails->reward_amount_or_percent > 0 && $setting != '' && $setting->reward_max_discount_amount > 0) {
+                    $payAmt = min(($amount * $percent) / 100, $setting->reward_max_discount_amount);
                 }
                 $payAmt = round($payAmt);
-                if($payAmt > 0){
+                if ($payAmt > 0) {
                     $customerReferralDetails->booking_id = $rentalBooking->booking_id;
                     $customerReferralDetails->payable_amount = $payAmt;
-                    $customerReferralDetails->save();    
+                    $customerReferralDetails->save();
                 }
             }
-        }catch(Exception $e){}
+        } catch (Exception $e) {
+        }
 
         $activityDescription = 'New Booking is added by admin user';
         $adminId = auth()->guard('admin')->user()->admin_id;
         logAdminActivities($activityDescription, NULL, $rentalBooking, NULL, $adminId);
-        
+
         return $this->successResponse($rentalBooking, 'Rental Booking created successfully');
     }
 
-    public function getAddBookingCalculation(Request $request){
+    public function getAddBookingCalculation(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'customer_id' => 'required|exists:customers,customer_id',
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'booking_start_date' => 'required|date',
             'booking_end_date' => 'required|date|after:start_date',
-            'coupon_code' => ['nullable','string','exists:coupons,code',new CheckCoupon()],
+            'coupon_code' => ['nullable', 'string', 'exists:coupons,code', new CheckCoupon()],
             'trip_amt_status' => 'required|in:0,1', //0 means event occurs when any changes are made on customer OR Vehicle OR Start & End Date time, 1 Means Trip Amount get changed manually
             'trip_amount' => 'nullable',
             'unlimited_status' => 'nullable',
@@ -1052,7 +1064,7 @@ class AdminBookingController extends Controller
         }
 
         $tripAmt = NULL;
-        if($request->trip_amt_status == 1){ //tripAmtStatus = 0 means event occurs when any changes are made on customer OR Vehicle OR Start & End Date time 
+        if ($request->trip_amt_status == 1) { //tripAmtStatus = 0 means event occurs when any changes are made on customer OR Vehicle OR Start & End Date time 
             $tripAmt = $request->trip_amount;
         }
         $unlimitedKm = 0;
@@ -1061,7 +1073,7 @@ class AdminBookingController extends Controller
         $bookingStartDate = $request->booking_start_date ?? '';
         $bookingEndDate = $request->booking_end_date ?? '';
         $couponCode = $request->coupon_code ?? '';
-        if($customerId != '' && $vehicleId != '' && $bookingStartDate != '' && $bookingEndDate != ''){
+        if ($customerId != '' && $vehicleId != '' && $bookingStartDate != '' && $bookingEndDate != '') {
             $startDate = Carbon::parse($bookingStartDate);
             $endDate = Carbon::parse($bookingEndDate);
             $existingBookings = AdminRentalBooking::where('vehicle_id', $vehicleId)
@@ -1079,30 +1091,30 @@ class AdminBookingController extends Controller
                     return Carbon::parse($booking->pickup_date)->format('d-m-Y H:i') . ' to ' . Carbon::parse($booking->return_date)->format('d-m-Y H:i');
                 })->implode(', ');
                 $latestReturnDate = $existingBookings->max('return_date');
-                $availableFrom = Carbon::parse($latestReturnDate)->addMinute()->format('d-m-Y H:i');    
+                $availableFrom = Carbon::parse($latestReturnDate)->addMinute()->format('d-m-Y H:i');
                 $message = "The vehicle is already booked for the following periods: $bookingPeriods. You can book from $availableFrom onwards.";
                 return $this->errorResponse($message);
             }
-            if($customerId != null){
+            if ($customerId != null) {
                 $existingBookingCustomer = AdminRentalBooking::where('customer_id', $customerId)->whereIn('status', ['running', 'confirmed'])
-                ->where(function ($query) use ($startDate, $endDate) {
-                    $query->whereBetween('pickup_date', [$startDate, $endDate])
-                        ->orWhereBetween('return_date', [$startDate, $endDate])
-                        ->orWhere(function ($query) use ($startDate, $endDate) {
-                            $query->where('pickup_date', '<', $startDate)
-                                ->where('return_date', '>', $endDate);
-                        });
-                })->exists();
+                    ->where(function ($query) use ($startDate, $endDate) {
+                        $query->whereBetween('pickup_date', [$startDate, $endDate])
+                            ->orWhereBetween('return_date', [$startDate, $endDate])
+                            ->orWhere(function ($query) use ($startDate, $endDate) {
+                                $query->where('pickup_date', '<', $startDate)
+                                    ->where('return_date', '>', $endDate);
+                            });
+                    })->exists();
                 if ($existingBookingCustomer) {
                     $message = "You have already booked another Vehicle for this specified time period.";
                     return $this->errorResponse($message);
                 }
             }
             $vehicle = Vehicle::where('vehicle_id', $vehicleId)->first();
-            
+
             // Check if Vehicle host has restricted this vehicle to book in Night time or not
             $checkVehicleInNightTime = checkVehicleInNightTime($vehicle, $startDate, $endDate);
-            if($checkVehicleInNightTime == false){
+            if ($checkVehicleInNightTime == false) {
                 return $this->errorResponse('You can not book this vehicle between 12 AM and 6 AM.');
             }
 
@@ -1113,20 +1125,20 @@ class AdminBookingController extends Controller
             $rentalBooking = new AdminRentalBooking();
             $rentalPrice = $vehicle->rental_price;
             $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
-            if(is_countable($checkOffer) && count($checkOffer) > 0){
-                $rentalPrice = getRentalPrice($rentalPrice,$vehicle->vehicle_id);
+            if (is_countable($checkOffer) && count($checkOffer) > 0) {
+                $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
             }
 
             $customerGst = '';
             $user = Customer::where('customer_id', $customerId)->first();
-            $customerGst = $user->gst_number ?? '';    
+            $customerGst = $user->gst_number ?? '';
             $taxRate = $customerGst ? 0.18 : 0.05;
             $unlimitedStatus = $request->unlimited_status ?? 0;
             $unlimitedKm = $request->unlimited_km ?? 0;
             $calculationDetails = $rentalBooking->computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $unlimitedKm, $couponCode, $startDate, $endDate, $typeId, false, 'new_booking', $customerId, NULL, NULL, $vehicleCommissionPercent, $taxRate, $tripAmt, $unlimitedStatus, $vehicleId);
             $vehicleTypeName = $vehicle->model->category->vehicleType->name ?? null;
             $kmLimit = calculateKmLimit($tripDurationHours, $vehicleTypeName);
-            $warning = $unlimitedKm ? '' : "Your journey is limited to ".(int)$kmLimit." km. Exceeding this limit will incur additional charges at ₹".$vehicle->extra_km_rate." per km.";
+            $warning = $unlimitedKm ? '' : "Your journey is limited to " . (int) $kmLimit . " km. Exceeding this limit will incur additional charges at ₹" . $vehicle->extra_km_rate . " per km.";
             $data['data'] = $calculationDetails;
             $data['warning'] = $warning;
 
@@ -1134,7 +1146,8 @@ class AdminBookingController extends Controller
         }
     }
 
-    public function getBookingPreviewData(Request $request){
+    public function getBookingPreviewData(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'booking_id' => 'required|exists:rental_bookings,booking_id',
         ]);
@@ -1143,64 +1156,64 @@ class AdminBookingController extends Controller
         }
 
         $bookingTransaction = '';
-        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle','payment'])->where('booking_id', $request->booking_id)->first();
-        if($rentalBookingDetails != ''){
+        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle', 'payment'])->where('booking_id', $request->booking_id)->first();
+        if ($rentalBookingDetails != '') {
             $bookingTransaction = BookingTransaction::select('booking_id', 'additional_charges', 'additional_charges_info', 'late_return', 'exceeded_km_limit')->where(['booking_id' => $rentalBookingDetails->booking_id, 'type' => 'completion', 'paid' => 0])->first();
         }
         $vehicles = Vehicle::select('vehicle_id', 'license_plate', 'model_id')->where('availability', 1)->where('is_deleted', 0)->where('vehicle_id', '!=', $rentalBookingDetails->vehicle_id)->with('model.category.vehicleType:type_id,name')->get();
 
         if (!empty($vehicles) && is_iterable($vehicles)) {
             collect($vehicles)->each(function ($item) {
-                $item->makeHidden(['branch_id','rental_price','extra_km_rate','extra_hour_rate','availability_calendar','commission_percent','publish','chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images','rating','total_rating','trip_count','location']);
-                $item->model->category->makeHidden(['name', 'icon' ,'sort', 'icon', 'is_deleted']);
+                $item->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating', 'total_rating', 'trip_count', 'location']);
+                $item->model->category->makeHidden(['name', 'icon', 'sort', 'icon', 'is_deleted']);
             });
         }
         $customerId = '';
-        if($rentalBookingDetails->customer_id != ''){
+        if ($rentalBookingDetails->customer_id != '') {
             $customerId = $rentalBookingDetails->customer_id;
         }
         $currentDate = Carbon::now()->setTimezone('Asia/Kolkata');
-        $returnDate = isset($rentalBookingDetails->return_date)?Carbon::parse($rentalBookingDetails->return_date):'';
-        if(is_countable($rentalBookingDetails->price_summary) && count($rentalBookingDetails->price_summary) > 0){
+        $returnDate = isset($rentalBookingDetails->return_date) ? Carbon::parse($rentalBookingDetails->return_date) : '';
+        if (is_countable($rentalBookingDetails->price_summary) && count($rentalBookingDetails->price_summary) > 0) {
             $cDetails = [];
-            foreach($rentalBookingDetails->price_summary as $k => $v){
+            foreach ($rentalBookingDetails->price_summary as $k => $v) {
                 //$cDetails[$v['key']] = $v['value'];
                 $cDetails[] = [
                     'key' => $v['key'],
                     'value' => $v['value'],
                 ];
-                $rentalBookingDetails->cDetails = $cDetails;    
+                $rentalBookingDetails->cDetails = $cDetails;
             }
-        }else{
-            $rentalBookingDetails->cDetails = '';    
+        } else {
+            $rentalBookingDetails->cDetails = '';
         }
 
         $bookingId = $request->booking_id ?? '';
         $cancelRentalBookingMessage = '';
         $refundPercent = $refundAmount = $diffInHours = 0;
         $responseDetils = getCancelDetails($bookingId);
-        if(is_countable($responseDetils) && count($responseDetils) > 0){
+        if (is_countable($responseDetils) && count($responseDetils) > 0) {
             $refundPercent = $responseDetils['refundPercent'] ?? 0;
             $refundAmount = $responseDetils['refundAmount'] ?? 0;
             $diffInHours = $responseDetils['diffInHours'] ?? 0;
         }
-        
-        if($responseDetils == NULL){
-            $cancelRentalBookingMessage = "Booking ID - # <b>".$bookingId. "</b> is not canceled as its pickup date is already passed Or not in valid status to cancel.";
-        }elseif($refundAmount > 0){
-            $cancelRentalBookingMessage = "Booking ID - # <b>".$bookingId. "</b> is canceled and You will get ₹ ".$refundAmount." Refund Amount ( ".$refundPercent." % )";
-        }else{
-            $cancelRentalBookingMessage = "Booking ID - # <b>".$bookingId. "</b> is canceled. You can't get any refund as you have cancelled vehicle within 24 Hours";
+
+        if ($responseDetils == NULL) {
+            $cancelRentalBookingMessage = "Booking ID - # <b>" . $bookingId . "</b> is not canceled as its pickup date is already passed Or not in valid status to cancel.";
+        } elseif ($refundAmount > 0) {
+            $cancelRentalBookingMessage = "Booking ID - # <b>" . $bookingId . "</b> is canceled and You will get ₹ " . $refundAmount . " Refund Amount ( " . $refundPercent . " % )";
+        } else {
+            $cancelRentalBookingMessage = "Booking ID - # <b>" . $bookingId . "</b> is canceled. You can't get any refund as you have cancelled vehicle within 24 Hours";
         }
         $rentalBookingDetails->cancelRentalBookingMessage = $cancelRentalBookingMessage;
 
-        $rentalBookingDetails->vehicle->makeHidden(['availability_calendar','commission_percent','publish','chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images','rating','total_rating','trip_count']);
+        $rentalBookingDetails->vehicle->makeHidden(['availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating', 'total_rating', 'trip_count']);
         $rentalBookingDetails->total_cost = getPaidFinalAmtSum($rentalBookingDetails->booking_id);
-        
+
         $hostInvoicePdf = url('api/host/v1/carhost-booking-invoice/' . $request->booking_id);
 
         $rentalBookingDetails->host_invoice_pdf = $hostInvoicePdf;
-        
+
         // Get vehicle update history
         $vehicleUpdateHistory = VehicleUpdateHistory::with(['oldVehicle', 'newVehicle', 'updatedBy'])
             ->where('booking_id', $request->booking_id)
@@ -1243,9 +1256,10 @@ class AdminBookingController extends Controller
         return $this->successResponse($data, 'Preview page Data get Successfully');
     }
 
-    public function bookingPreviewActionList(Request $request){
-        $previewActions = config('global_values.preview_actions');       
-        if(isset($previewActions) && is_countable($previewActions) && count($previewActions) > 0){
+    public function bookingPreviewActionList(Request $request)
+    {
+        $previewActions = config('global_values.preview_actions');
+        if (isset($previewActions) && is_countable($previewActions) && count($previewActions) > 0) {
             $previewActionsArr = [];
             foreach ($previewActions as $key => $value) {
                 $previewActionsArr[] = [
@@ -1254,19 +1268,20 @@ class AdminBookingController extends Controller
                 ];
             }
             return $this->successResponse($previewActionsArr, 'Preview Actions are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Preview Actions are not found');
         }
     }
 
-    public function bookingPreviewActions(Request $request){
+    public function bookingPreviewActions(Request $request)
+    {
         $previewActions = config('global_values.preview_actions');
         $previewActions = implode(',', $previewActions);
 
         $startDate = Carbon::parse($request->input('extend_return_date'));
         $adjustedStartDate = $startDate->addMinutes(5)->toDateTimeString();
         $validator = Validator::make($request->all(), [
-            'preview_action' => 'required|in:'.$previewActions,
+            'preview_action' => 'required|in:' . $previewActions,
             'booking_id' => 'required|exists:rental_bookings,booking_id',
             'vehicle_id' => 'nullable|exists:vehicles,vehicle_id',
             'start_journey_imgs' => 'nullable|array|min:5',
@@ -1274,14 +1289,15 @@ class AdminBookingController extends Controller
             'start_km' => 'nullable',
             'extend_return_date' => 'nullable|date:' . Carbon::now()->setTimezone('Asia/Kolkata')->addMinutes(1)->toDateTimeString(),
             'extend_to_date_time' => 'nullable|date|after:' . $adjustedStartDate,
-            'extend_coupon_code' => ['nullable','string','exists:coupons,code',new CheckCoupon()],
+            'extend_coupon_code' => ['nullable', 'string', 'exists:coupons,code', new CheckCoupon()],
             'force_extend_status' => 'nullable|in:0,1',
             'force' => 'nullable|in:0,1',
             'trip_amt' => 'nullable',
             'end_km' => 'nullable',
             'end_journey_imgs' => 'nullable|array|min:5',
             //'end_journey_imgs.*' => 'nullable|mimetypes:image/heic,image/heif,image/jpeg,image/png,image/jpg,image/bmp,image/gif,image/svg,image/webp|max:10000',
-            'end_journey_imgs.*' => ['max:10000',
+            'end_journey_imgs.*' => [
+                'max:10000',
                 function ($attribute, $value, $fail) {
                     if ($value instanceof \Illuminate\Http\UploadedFile) {
                         if (!$value->isValid()) {
@@ -1299,7 +1315,7 @@ class AdminBookingController extends Controller
                         $fail("$attribute must be an uploaded image or a valid image URL.");
                     }
                 }
-            ], 
+            ],
         ]);
         $validator->sometimes('vehicle_id', 'required', function ($input) {
             return $input->preview_action == 'update_vehicle';
@@ -1322,7 +1338,7 @@ class AdminBookingController extends Controller
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
-        if($request->preview_action == 'update_vehicle'){
+        if ($request->preview_action == 'update_vehicle') {
             $vehicleId = $request->vehicle_id;
             $bookingId = $request->booking_id;
             $changeReason = $request->vehicle_change_reason ?? '';
@@ -1332,7 +1348,7 @@ class AdminBookingController extends Controller
             //     $rentalBooking = AdminRentalBooking::where('booking_id', $bookingId)->first();
             //     $oldVal = clone $rentalBooking;
             //     $oldVehicleId = $rentalBooking->vehicle_id;
-                
+
             //     if($rentalBooking->initial_vehicle_id != ''){
             //         $rentalBooking->vehicle_id = $vehicleId;
             //         $rentalBooking->save();
@@ -1357,7 +1373,7 @@ class AdminBookingController extends Controller
             //             ->whereIn('type', ['new_booking', 'extension'])
             //             ->where('is_deleted', 0)
             //             ->get();
-                    
+
             //         foreach($bookingTransactions as $transaction){
             //             if($transaction->trip_amount_to_pay > 0){
             //                 $vehicleCommissionAmount = round(
@@ -1368,7 +1384,7 @@ class AdminBookingController extends Controller
             //                     $vehicleCommissionAmount * 0.18,
             //                     2
             //                 );
-                            
+
             //                 $transaction->vehicle_commission_amount = $vehicleCommissionAmount;
             //                 $transaction->vehicle_commission_tax_amt = $vehicleCommissionTaxAmt;
             //                 $transaction->save();
@@ -1376,48 +1392,48 @@ class AdminBookingController extends Controller
             //         }
             //     }
             // }
-            if($vehicleId != '' && $bookingId != ''){
+            if ($vehicleId != '' && $bookingId != '') {
                 $rentalBooking = AdminRentalBooking::where('booking_id', $bookingId)->first();
                 $oldVal = clone $rentalBooking;
                 $oldVehicleId = $rentalBooking->vehicle_id;
-                
-                if($rentalBooking->initial_vehicle_id != ''){
+
+                if ($rentalBooking->initial_vehicle_id != '') {
                     $rentalBooking->vehicle_id = $vehicleId;
                     $rentalBooking->save();
-                }  
+                }
                 $newVal = $rentalBooking;
-                
+
                 // Get old and new vehicle's commission_percent
                 $oldVehicle = Vehicle::where('vehicle_id', $oldVehicleId)->first();
                 $newVehicle = Vehicle::where('vehicle_id', $vehicleId)->first();
-                
+
                 // Check if commission_percent is the same
                 $oldCommissionPercent = $oldVehicle ? ($oldVehicle->commission_percent ?? 0) : 0;
                 $newCommissionPercent = $newVehicle ? ($newVehicle->commission_percent ?? 0) : 0;
                 $commissionPercentSame = ($oldCommissionPercent == $newCommissionPercent);
-                
+
                 $bookingTransactionsData = null;
                 // Only capture and update booking transactions if commission_percent is different
-                if(!$commissionPercentSame){
+                if (!$commissionPercentSame) {
                     // Capture BookingTransaction data BEFORE update
                     $bookingTransactionsBefore = BookingTransaction::where('booking_id', $bookingId)
                         ->whereIn('type', ['new_booking', 'extension'])
                         ->where('is_deleted', 0)
                         ->get()
-                        ->map(function($transaction) {
+                        ->map(function ($transaction) {
                             return $transaction->toArray();
                         })
                         ->toArray();
-                    
+
                     // Update vehicle commission amounts in booking_transactions
-                    if($newVehicle && $newVehicle->commission_percent > 0){
+                    if ($newVehicle && $newVehicle->commission_percent > 0) {
                         $bookingTransactions = BookingTransaction::where('booking_id', $bookingId)
                             ->whereIn('type', ['new_booking', 'extension'])
                             ->where('is_deleted', 0)
                             ->get();
-                        
-                        foreach($bookingTransactions as $transaction){
-                            if($transaction->trip_amount_to_pay > 0){
+
+                        foreach ($bookingTransactions as $transaction) {
+                            if ($transaction->trip_amount_to_pay > 0) {
                                 $vehicleCommissionAmount = round(
                                     $transaction->trip_amount_to_pay * ($newVehicle->commission_percent / 100),
                                     2
@@ -1426,24 +1442,24 @@ class AdminBookingController extends Controller
                                     $vehicleCommissionAmount * 0.18,
                                     2
                                 );
-                                
+
                                 $transaction->vehicle_commission_amount = $vehicleCommissionAmount;
                                 $transaction->vehicle_commission_tax_amt = $vehicleCommissionTaxAmt;
                                 $transaction->save();
                             }
                         }
                     }
-                    
+
                     // Capture BookingTransaction data AFTER update
                     $bookingTransactionsAfter = BookingTransaction::where('booking_id', $bookingId)
                         ->whereIn('type', ['new_booking', 'extension'])
                         ->where('is_deleted', 0)
                         ->get()
-                        ->map(function($transaction) {
+                        ->map(function ($transaction) {
                             return $transaction->toArray();
                         })
                         ->toArray();
-                    
+
                     // Prepare booking transactions data for storage
                     $bookingTransactionsData = [
                         'before_update' => $bookingTransactionsBefore,
@@ -1463,12 +1479,12 @@ class AdminBookingController extends Controller
                     'booking_transactions_data' => $bookingTransactionsData,
                 ]);
             }
-            $description = 'Vehicle changed for booking ID: '.$bookingId.' to vehicle ID: '.$vehicleId;
+            $description = 'Vehicle changed for booking ID: ' . $bookingId . ' to vehicle ID: ' . $vehicleId;
             logAdminActivities($description, $oldVal, $newVal);
 
             return $this->successResponse($rentalBooking, 'Vehicle updated Successfully');
         }
-        if($request->preview_action == 'start_journey'){
+        if ($request->preview_action == 'start_journey') {
             $rentalBooking = RentalBooking::select('booking_id', 'return_date', 'start_otp', 'status', 'customer_id')->where('booking_id', $request->booking_id)->first();
             if ($rentalBooking == '') {
                 return $this->errorResponse('Booking is not found');
@@ -1488,14 +1504,14 @@ class AdminBookingController extends Controller
             $rentalBooking->start_datetime = $request->start_date_time ? Carbon::parse($request->start_date_time) : $currentDatetime;
             $rentalBooking->save();
             $imageUrls = [];
-            if($request->file('start_journey_imgs')){
+            if ($request->file('start_journey_imgs')) {
                 foreach ($request->file('start_journey_imgs') as $key => $image) {
                     $file = $image;
-                    $filename = 'start_journey_'.$key.'_'.time() . '.' . $image->getClientOriginalExtension();
+                    $filename = 'start_journey_' . $key . '_' . time() . '.' . $image->getClientOriginalExtension();
                     $file->move(public_path('images/rental_booking_images'), $filename);
                     $imageUrls[] = $filename;
                 }
-                if(isset($imageUrls) && is_countable($imageUrls) && count($imageUrls) > 0){
+                if (isset($imageUrls) && is_countable($imageUrls) && count($imageUrls) > 0) {
                     foreach ($imageUrls as $imageUrl) {
                         $rentalBookingImage = new RentalBookingImage();
                         $rentalBookingImage->booking_id = $rentalBooking->booking_id;
@@ -1506,22 +1522,22 @@ class AdminBookingController extends Controller
                 }
             }
             //Store Admin log
-            if(auth()->guard('admin')->check()){
+            if (auth()->guard('admin')->check()) {
                 $adminUserId = auth()->guard('admin')->user()->admin_id;
-            }else{
+            } else {
                 $adminUserId = 0;
             }
-            if($request->has('start_date_time') && $request->start_date_time != ''){
-                $activityDescription = 'Journey has been Started for Booking Id -'.$rentalBooking->booking_id.' at '.$request->start_date_time.' with manual data entry by Admin user';
-            }else{
-                $activityDescription = 'Journey has been Started for Booking Id -'.$rentalBooking->booking_id.' by Admin User';
+            if ($request->has('start_date_time') && $request->start_date_time != '') {
+                $activityDescription = 'Journey has been Started for Booking Id -' . $rentalBooking->booking_id . ' at ' . $request->start_date_time . ' with manual data entry by Admin user';
+            } else {
+                $activityDescription = 'Journey has been Started for Booking Id -' . $rentalBooking->booking_id . ' by Admin User';
             }
             // $activityDescription = 'Journey has been Started for Booking Id -'.$rentalBooking->booking_id.' by Admin User';
             logAdminActivities($activityDescription, NULL, $rentalBooking, NULL, $adminUserId);
 
             return $this->successResponse($rentalBooking, 'Journey started Successfully');
         }
-        if($request->preview_action == 'extend_price_summary'){
+        if ($request->preview_action == 'extend_price_summary') {
             $startDate = Carbon::parse($request->extend_return_date);
             $fetchEndDate = date('Y-m-d H:i', strtotime($request->extend_to_date_time));
             $endDate = Carbon::parse($fetchEndDate);
@@ -1533,7 +1549,7 @@ class AdminBookingController extends Controller
             // Check if Vehicle host has restricted this vehicle to book in Night time or not
             $vehicle = $rentalBooking->vehicle;
             $checkVehicleInNightTime = checkVehicleInNightTime($vehicle, $startDate, $endDate);
-            if($checkVehicleInNightTime == false){
+            if ($checkVehicleInNightTime == false) {
                 return $this->errorResponse('You can not book this vehicle between 12 AM and 6 AM.');
             }
 
@@ -1543,13 +1559,13 @@ class AdminBookingController extends Controller
             $vehicleCommissionPercent = $vehicle->commission_percent ?? 0;
             $rentalPrice = $vehicle->rental_price;
             $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
-            if(is_countable($checkOffer) && count($checkOffer) > 0){
+            if (is_countable($checkOffer) && count($checkOffer) > 0) {
                 $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
             }
             $taxRate = $rentalBooking->tax_rate ?? 0;
-            if($taxRate <= 0){
+            if ($taxRate <= 0) {
                 $user = Customer::where('customer_id', $rentalBooking->customer_id)->first();
-                $customerGst = $user->gst_number ?? '';    
+                $customerGst = $user->gst_number ?? '';
                 $taxRate = $customerGst ? 0.18 : 0.05;
             }
             $tripAmt = $request->trip_amt ?? null;
@@ -1570,17 +1586,17 @@ class AdminBookingController extends Controller
                 $vehicleCommissionPercent,
                 $taxRate,
                 $tripAmt,
-                0, 
+                0,
                 $rentalBooking->vehicle_id,
                 $unlimitedKmStatus,
             );
             $costDetailArr = [];
-            if(isset($rentalCostDetails) && is_countable($rentalCostDetails) && count($rentalCostDetails) > 0){
+            if (isset($rentalCostDetails) && is_countable($rentalCostDetails) && count($rentalCostDetails) > 0) {
                 $keyArr = ['trip_amount', 'tax_amt', 'convenience_fee', 'coupon_discount', 'total_amount', 'refundable_deposit', 'final_amount'];
-                foreach($rentalCostDetails as $k => $v){
-                    if(in_array($k, $keyArr)){    
+                foreach ($rentalCostDetails as $k => $v) {
+                    if (in_array($k, $keyArr)) {
                         $costDetailArr[] = [
-                            'key' => str_replace('_',' ', ucwords($k)),
+                            'key' => str_replace('_', ' ', ucwords($k)),
                             'value' => $v
                         ];
                     }
@@ -1591,12 +1607,12 @@ class AdminBookingController extends Controller
             $warning = $rentalBooking->unlimited_kms ? '' : "Upon extension, you will receive additional $kmLimit kilometers for your journey. Exceeding this limit will incur additional charges at ₹{$vehicle->extra_km_rate} per km.";
             $trimAmount = $rentalCostDetails['trip_amount'] ?? 0;
             $customerId = '';
-            if($rentalBooking->customer_id){
+            if ($rentalBooking->customer_id) {
                 $customerId = $rentalBooking->customer_id;
             }
             $coupons = getAvailCoupons($startDate, $endDate, $customerId);
             $couponDetails = [];
-            if(is_countable($coupons) && count($coupons) > 0){
+            if (is_countable($coupons) && count($coupons) > 0) {
                 foreach ($coupons as $key => $value) {
                     $couponDetails[] = [
                         'coupon_title' => $value['coupon_title'],
@@ -1610,30 +1626,30 @@ class AdminBookingController extends Controller
             $data['warning'] = $warning;
             $data['trimAmount'] = $trimAmount;
             $data['couponDetails'] = $couponDetails;
-            
+
             return $this->successResponse($data, 'Extend Price summary get Successfully');
         }
-        if($request->preview_action == 'extend_journey'){
+        if ($request->preview_action == 'extend_journey') {
             $startDate = Carbon::parse($request->extend_return_date);
             $endDate = Carbon::parse($request->extend_to_date_time);
             $bookingId = $request->booking_id;
             $adjustedStartDate = $startDate->addMinutes(5)->toDateTimeString();
             $currentDateTime = Carbon::now()->setTimezone('Asia/Kolkata')->addMinutes(1);
-            
+
             $rentalBooking = AdminRentalBooking::select('booking_id', 'status', 'return_date', 'vehicle_id', 'unlimited_kms', 'customer_id', 'tax_rate')->with('vehicle')->where('booking_id', $bookingId)->first();
 
             // Check if Vehicle host has restricted this vehicle to book in Night time or not
             $vehicle = $rentalBooking->vehicle;
             $checkVehicleInNightTime = checkVehicleInNightTime($vehicle, $startDate, $endDate);
-            if($checkVehicleInNightTime == false){
+            if ($checkVehicleInNightTime == false) {
                 return $this->errorResponse('You can not book this vehicle between 12 AM and 6 AM.');
             }
 
             $user = Customer::where('customer_id', $rentalBooking->customer_id)->first();
-            if($user != '' && $user->is_blocked == 1){
+            if ($user != '' && $user->is_blocked == 1) {
                 return $this->errorResponse("You are blocked by admin, please contact admin for more details.");
             }
-            if($request->force_extend_status != 1){
+            if ($request->force_extend_status != 1) {
                 if (!$startDate || $startDate->lt($currentDateTime)) {
                     return $this->errorResponse("Existing Return date must be at least 1 minute from now.");
                 }
@@ -1650,22 +1666,22 @@ class AdminBookingController extends Controller
             if ($endDate->lte($startDate)) {
                 return $this->errorResponse("The new extended date must be greater than the existing return date.");
             }
-        
+
             $tripDurationMinutes = $endDate->diffInMinutes($startDate);
             $vehicle = $rentalBooking->vehicle;
             $typeId = $vehicle->model->category->vehicleType->type_id ?? NULL;
             $vehicleCommissionPercent = $vehicle->commission_percent ?? 0;
             $rentalPrice = $vehicle->rental_price;
             $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
-            if(is_countable($checkOffer) && count($checkOffer) > 0){
+            if (is_countable($checkOffer) && count($checkOffer) > 0) {
                 $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
             }
             $taxRate = $rentalBooking->tax_rate ?? 0;
-            if($taxRate <= 0){
-                $customerGst = $user->gst_number ?? '';    
+            if ($taxRate <= 0) {
+                $customerGst = $user->gst_number ?? '';
                 $taxRate = $customerGst ? 0.18 : 0.05;
             }
-        
+
             $tripAmt = $request->trip_amt ?? 0;
             $rentalCostDetails = $rentalBooking->computeRentalCostDetails(
                 $rentalPrice,
@@ -1686,7 +1702,7 @@ class AdminBookingController extends Controller
                 0,
                 $vehicle->vehicle_id
             );
-        
+
             // Insert into booking_transactions table
             $bookingTransaction = new BookingTransaction();
             $bookingTransaction->booking_id = $rentalBooking->booking_id;
@@ -1725,7 +1741,7 @@ class AdminBookingController extends Controller
             $payment->amount = $rentalCostDetails['final_amount'];
             $payment->payment_type = 'extension';
             $payment->payment_date = now()->toDateString(); // Adjust this based on your requirements
-            $payment->status = 'captured'; 
+            $payment->status = 'captured';
             $payment->save();
 
             $rentalBooking->return_date = $bookingTransaction->end_date;
@@ -1734,32 +1750,33 @@ class AdminBookingController extends Controller
             $rentalBooking->save();
 
             //Store Admin log
-            if(auth()->guard('admin')->check()){
+            if (auth()->guard('admin')->check()) {
                 $adminUserId = auth()->guard('admin')->user()->admin_id;
-            }else{
+            } else {
                 $adminUserId = 0;
             }
-            if($request->has('end_date_time') && $request->end_date_time != ''){
-                $activityDescription = 'Journey has been Extended for Booking Id -'.$rentalBooking->booking_id.' at '.$request->end_date_time.' with manual data entry by Admin user';
-            }else{
-                $activityDescription = 'Journey has been Extended for Booking Id -'.$rentalBooking->booking_id.' by Admin User';
+            if ($request->has('end_date_time') && $request->end_date_time != '') {
+                $activityDescription = 'Journey has been Extended for Booking Id -' . $rentalBooking->booking_id . ' at ' . $request->end_date_time . ' with manual data entry by Admin user';
+            } else {
+                $activityDescription = 'Journey has been Extended for Booking Id -' . $rentalBooking->booking_id . ' by Admin User';
             }
             // $activityDescription = 'Journey has been Extended for Booking Id -'.$rentalBooking->booking_id.' by Admin User';
             logAdminActivities($activityDescription, NULL, $rentalBooking, NULL, $adminUserId);
 
-            try{
+            try {
                 $mobileNo = $rentalBooking->customer->mobile_number;
                 if (isset($rentalBooking->customer) && $rentalBooking->customer->is_test_user != 1) {
-                $payment->payment_env = 'live';
-                }else{
-                    $payment->payment_env = 'test';    
+                    $payment->payment_env = 'live';
+                } else {
+                    $payment->payment_env = 'test';
                 }
                 $payment->save();
-            }catch(Exception $e){}
+            } catch (Exception $e) {
+            }
 
             return $this->successResponse($rentalBooking, 'Booking Extended Successfully');
         }
-        if($request->preview_action == 'get_extend_booking_calculation'){
+        if ($request->preview_action == 'get_extend_booking_calculation') {
             $startDate = Carbon::parse($request->extend_return_date);
             $fetchEndDate = date('Y-m-d H:i', strtotime($request->extend_to_date_time));
             $endDate = Carbon::parse($fetchEndDate);
@@ -1773,13 +1790,13 @@ class AdminBookingController extends Controller
             $vehicleCommissionPercent = $vehicle->commission_percent ?? 0;
             $rentalPrice = $vehicle->rental_price;
             $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
-            if(is_countable($checkOffer) && count($checkOffer) > 0){
+            if (is_countable($checkOffer) && count($checkOffer) > 0) {
                 $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
             }
             $taxRate = $rentalBooking->tax_rate ?? 0;
-            if($taxRate <= 0){
+            if ($taxRate <= 0) {
                 $user = Customer::where('customer_id', $rentalBooking->customer_id)->first();
-                $customerGst = $user->gst_number ?? '';    
+                $customerGst = $user->gst_number ?? '';
                 $taxRate = $customerGst ? 0.18 : 0.05;
             }
             $tripAmt = $request->trip_amt ?? null;
@@ -1800,17 +1817,17 @@ class AdminBookingController extends Controller
                 $vehicleCommissionPercent,
                 $taxRate,
                 $tripAmt,
-                0, 
+                0,
                 $rentalBooking->vehicle_id,
                 $unlimitedKmStatus,
             );
             $costDetailArr = [];
-            if(isset($rentalCostDetails) && is_countable($rentalCostDetails) && count($rentalCostDetails) > 0){
+            if (isset($rentalCostDetails) && is_countable($rentalCostDetails) && count($rentalCostDetails) > 0) {
                 $keyArr = ['trip_amount', 'tax_amt', 'convenience_fee', 'coupon_discount', 'total_amount', 'refundable_deposit', 'final_amount'];
-                foreach($rentalCostDetails as $k => $v){
-                    if(in_array($k, $keyArr)){    
+                foreach ($rentalCostDetails as $k => $v) {
+                    if (in_array($k, $keyArr)) {
                         $costDetailArr[] = [
-                            'key' => str_replace('_',' ', ucwords($k)),
+                            'key' => str_replace('_', ' ', ucwords($k)),
                             'value' => $v
                         ];
                     }
@@ -1821,12 +1838,12 @@ class AdminBookingController extends Controller
             $warning = $rentalBooking->unlimited_kms ? '' : "Upon extension, you will receive additional $kmLimit kilometers for your journey. Exceeding this limit will incur additional charges at ₹{$vehicle->extra_km_rate} per km.";
             $trimAmount = $rentalCostDetails['trip_amount'] ?? 0;
             $customerId = '';
-            if($rentalBooking->customer_id){
+            if ($rentalBooking->customer_id) {
                 $customerId = $rentalBooking->customer_id;
             }
             $coupons = getAvailCoupons($startDate, $endDate, $customerId);
             $couponDetails = [];
-            if(is_countable($coupons) && count($coupons) > 0){
+            if (is_countable($coupons) && count($coupons) > 0) {
                 foreach ($coupons as $key => $value) {
                     $couponDetails[] = [
                         'coupon_title' => $value['coupon_title'],
@@ -1840,18 +1857,18 @@ class AdminBookingController extends Controller
             $data['warning'] = $warning;
             $data['trimAmount'] = $trimAmount;
             $data['couponDetails'] = $couponDetails;
-            
+
             return $this->successResponse($data, 'Extend Price summary get Successfully');
         }
-        if($request->preview_action == 'end_journey'){
+        if ($request->preview_action == 'end_journey') {
             $rentalBooking = RentalBooking::where('booking_id', $request->booking_id)->first();
-            if($rentalBooking == ''){
+            if ($rentalBooking == '') {
                 return $this->errorResponse('Invalid bookings');
             }
             if ($rentalBooking->customer && $rentalBooking->customer->is_blocked == 1) {
                 return $this->errorResponse('You can not End this Journey due to this customer has blocked');
             }
-            if(isset($request->end_km) && $request->end_km != '' && $request->end_km <= $rentalBooking->start_kilometers){
+            if (isset($request->end_km) && $request->end_km != '' && $request->end_km <= $rentalBooking->start_kilometers) {
                 return $this->errorResponse("Please enter an End Kilometer value higher than the Start Kilometer.");
             }
             $customerDocument = CustomerDocument::where(['customer_id' => $rentalBooking->customer_id, 'is_approved' => 'approved', 'is_blocked' => 1])->exists();
@@ -1865,18 +1882,18 @@ class AdminBookingController extends Controller
             $adminPenaltyId = $request->admin_penalty_id ?? '';
             $taxRate = $rentalBooking->tax_rate ?? 0;
             $user = Customer::where('customer_id', $rentalBooking->customer_id)->first();
-            $customerGst = $user->gst_number ?? '';    
-            if($taxRate <= 0){
+            $customerGst = $user->gst_number ?? '';
+            if ($taxRate <= 0) {
                 $taxRate = $customerGst ? 0.18 : 0.05;
             }
-            $totalPenalty = (float)$adminPenalty + (float)$exceedKmLimit + (float)$exceedHourLimit;
+            $totalPenalty = (float) $adminPenalty + (float) $exceedKmLimit + (float) $exceedHourLimit;
             $vehicleCommissionTaxAmt = $vehicleCommissionAmt = 0;
-            if($totalPenalty > 0){
+            if ($totalPenalty > 0) {
                 $vehicleCommissionPercent = $rentalBooking->vehicle->commission_percent ?? 0;
-                if($vehicleCommissionPercent > 0){
+                if ($vehicleCommissionPercent > 0) {
                     $vehicleCommissionAmt = ($totalPenalty * $vehicleCommissionPercent) / 100;
                     $vehicleCommissionAmt = round($vehicleCommissionAmt);
-                    $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;    
+                    $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
                 }
             }
             $taxAmt = $totalPenalty * $taxRate;
@@ -1925,14 +1942,14 @@ class AdminBookingController extends Controller
                 BookingTransaction::create($completionData);
             }
             $imageUrls = [];
-            if($request->file('end_journey_imgs')){
+            if ($request->file('end_journey_imgs')) {
                 foreach ($request->file('end_journey_imgs') as $key => $image) {
                     $file = $image;
-                    $filename = 'end_journey_'.$key.'_'.time() . '.' . $image->getClientOriginalExtension();
+                    $filename = 'end_journey_' . $key . '_' . time() . '.' . $image->getClientOriginalExtension();
                     $file->move(public_path('images/rental_booking_images'), $filename);
                     $imageUrls[] = $filename;
                 }
-                if(isset($imageUrls) && is_countable($imageUrls) && count($imageUrls) > 0){
+                if (isset($imageUrls) && is_countable($imageUrls) && count($imageUrls) > 0) {
                     foreach ($imageUrls as $imageUrl) {
                         $rentalBookingImage = new RentalBookingImage();
                         $rentalBookingImage->booking_id = $rentalBooking->booking_id;
@@ -1943,25 +1960,25 @@ class AdminBookingController extends Controller
                 }
             }
             // Update booking status if no payment is required
-            $fileName = 'customer_agreements_'.$rentalBooking->customer_id.'_'.$rentalBooking->booking_id.'.pdf';
-            $filePath = public_path().'/customer_aggrements/'.$fileName;
-            if(file_exists($filePath)){ 
+            $fileName = 'customer_agreements_' . $rentalBooking->customer_id . '_' . $rentalBooking->booking_id . '.pdf';
+            $filePath = public_path() . '/customer_aggrements/' . $fileName;
+            if (file_exists($filePath)) {
                 unlink($filePath);
             }
             $adminPenaltyObj = '';
-            if($adminPenaltyId != ''){
+            if ($adminPenaltyId != '') {
                 $adminPenaltyObj = AdminPenalty::where(['id' => $adminPenaltyId, 'is_paid' => 0])->first();
             }
-            if($adminPenaltyObj == ''){
+            if ($adminPenaltyObj == '') {
                 $adminPenaltyObj = new AdminPenalty();
                 $adminPenaltyObj->booking_id = $rentalBooking->booking_id;
             }
             $adminPenaltyObj->amount = $adminPenalty;
             $adminPenaltyObj->penalty_details = $adminPenaltyInfo;
             $adminPenaltyObj->is_paid = 1;
-            $adminPenaltyObj->save();    
+            $adminPenaltyObj->save();
             $penaltyTransaction = BookingTransaction::where(['booking_id' => $rentalBooking->booking_id, 'type' => 'penalty', 'paid' => 0])->first();
-            if($penaltyTransaction != ''){
+            if ($penaltyTransaction != '') {
                 $penaltyTransaction->paid = 1;
                 $penaltyTransaction->tax_amt = 0;
                 $penaltyTransaction->total_amount = 0;
@@ -1970,22 +1987,22 @@ class AdminBookingController extends Controller
             }
 
             //Store Admin log
-            if(auth()->guard('admin')->check()){
+            if (auth()->guard('admin')->check()) {
                 $adminUserId = auth()->guard('admin')->user()->admin_id;
-            }else{
+            } else {
                 $adminUserId = 0;
             }
-            $activityDescription = 'Journey has been Ended for Booking Id -'.$rentalBooking->booking_id.' by Admin User';
+            $activityDescription = 'Journey has been Ended for Booking Id -' . $rentalBooking->booking_id . ' by Admin User';
             logAdminActivities($activityDescription, NULL, $rentalBooking, NULL, $adminUserId);
 
             //Send Email and Push notifications to the User
-            SendNotificationJob::dispatch($rentalBooking->customer_id, $rentalBooking->booking_id, 'completion')->onQueue('emails'); 
-            $rentalBooking->status = 'completed'; 
-            $rentalBooking->save(); 
+            SendNotificationJob::dispatch($rentalBooking->customer_id, $rentalBooking->booking_id, 'completion')->onQueue('emails');
+            $rentalBooking->status = 'completed';
+            $rentalBooking->save();
 
             $lastSequence = AdminRentalBooking::max('sequence_no');
             $rentalBooking->sequence_no = $lastSequence + 1;
-            if(isset($request->end_km) && $request->end_km != '' && $rentalBooking != '' && $request->end_km <= $rentalBooking->start_kilometers){
+            if (isset($request->end_km) && $request->end_km != '' && $rentalBooking != '' && $request->end_km <= $rentalBooking->start_kilometers) {
                 return $this->errorResponse("Please enter an End Kilometer value higher than the Start Kilometer.");
             }
             $rentalBooking->end_kilometers = $request->end_km ?? 0;
@@ -1996,22 +2013,22 @@ class AdminBookingController extends Controller
 
             return $this->successResponse($rentalBooking, 'Journey ended Successfully');
         }
-        if($request->preview_action == 'cancel_journey'){
+        if ($request->preview_action == 'cancel_journey') {
             $bookingId = $request->booking_id;
             $force = $request->input('force', 0);
             $refundPercent = $refundAmount = $diffInHours = 0;
             $responseDetils = getCancelDetails($bookingId);
-            if(is_countable($responseDetils) && count($responseDetils) > 0){
+            if (is_countable($responseDetils) && count($responseDetils) > 0) {
                 $refundPercent = $responseDetils['refundPercent'] ?? 0;
                 $refundAmount = $responseDetils['refundAmount'] ?? 0;
                 $diffInHours = $responseDetils['diffInHours'] ?? 0;
             }
-            if($responseDetils == NULL && $force != 1){
-                return $this->errorResponse("Booking ID - #".$bookingId. " is not canceled as its pickup date is already passed Or not in valid status to cancel.");
+            if ($responseDetils == NULL && $force != 1) {
+                return $this->errorResponse("Booking ID - #" . $bookingId . " is not canceled as its pickup date is already passed Or not in valid status to cancel.");
             }
-            
+
             $checkBooking = CancelRentalBooking::where(['booking_id' => $bookingId, 'hours_diffrence' => $diffInHours, 'refund_percent' => $refundPercent, 'refund_amount' => $refundAmount])->exists();
-            if($checkBooking){
+            if ($checkBooking) {
                 return $this->errorResponse("This booking is already Canceled");
             }
             $cancelRentalBooking = new CancelRentalBooking();
@@ -2021,18 +2038,18 @@ class AdminBookingController extends Controller
             $cancelRentalBooking->refund_amount = $refundAmount;
             $cancelRentalBooking->save();
             $rBooking = AdminRentalBooking::where('booking_id', $bookingId)->first();
-            if($rBooking != ''){
+            if ($rBooking != '') {
                 $rBooking->status = 'canceled';
                 $rBooking->save();
             }
             return $this->successResponse($cancelRentalBooking, "Booking Cancel Successfully");
         }
-        if($request->preview_action == 'undo_cancel'){
+        if ($request->preview_action == 'undo_cancel') {
             $bookingId = $request->booking_id;
-            if($bookingId != ''){
+            if ($bookingId != '') {
                 $booking = RentalBooking::where('booking_id', $bookingId)->first();
                 $cancelRentalBooking = CancelRentalBooking::where('booking_id', $bookingId)->first();
-                if($booking != '' && $cancelRentalBooking != ''){
+                if ($booking != '' && $cancelRentalBooking != '') {
                     $booking->status = 'confirmed';
                     $booking->save();
                     $cancelRentalBooking->is_deleted = 1;

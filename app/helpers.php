@@ -72,64 +72,74 @@ function getIndianCurrency(float $number)
 
 function logAdminActivity($activityDescription, $oldVal = NULL, $newVal = NULL, $oldImg = NULL, $adminId = NULL)
 { //adminId particulary used for Queue Job
-    if (auth()->guard('admin_web')->check()) {
-        $adminUserId = auth()->guard('admin_web')->user()->admin_id;
-    } else {
-        $adminUserId = $adminId;
-    }
+    $admin = auth()->guard('admin_web')->user() ?? auth()->guard('admin')->user() ?? auth()->user();
+    $adminUserId = $admin ? $admin->getKey() : $adminId;
 
     $adminActivityLog = new AdminActivityLog();
-    $adminActivityLog->admin_id = $adminUserId;
-    $adminActivityLog->activity_description = isset($activityDescription) ? $activityDescription : NULL;
-    $adminActivityLog->save();
 
-    if ($oldVal != NULL) {
-        if ($oldImg != NULL)
+    // Check for column existence to support live DB without changes
+    $tableColumns = \Schema::getColumnListing($adminActivityLog->getTable());
+    if (in_array('admin_id', $tableColumns)) {
+        $adminActivityLog->admin_id = $adminUserId;
+    }
+
+    $adminActivityLog->activity_description = $activityDescription ?? NULL;
+
+    if ($oldVal !== null && $oldVal !== '') {
+        if ($oldImg !== null && is_object($oldVal))
             $oldVal->icon = $oldImg;
         $adminActivityLog->old_value = json_encode($oldVal);
     }
-    if ($newVal != NULL) {
+    if ($newVal !== null && $newVal !== '') {
         $adminActivityLog->new_value = json_encode($newVal);
     }
     $adminActivityLog->save();
-
 }
 
 function logAdminActivities($activityDescription, $oldVal = NULL, $newVal = NULL, $oldImg = NULL, $adminId = NULL)
 { //adminId particulary used for Queue Jobs
-    if (auth()->guard('admin')->check()) {
-        $adminUserId = auth()->guard('admin')->user()->admin_id;
-    } else {
-        $adminUserId = $adminId;
-    }
+    $admin = auth()->guard('admin_web')->user() ?? auth()->guard('admin')->user() ?? auth()->user();
+    $adminUserId = $admin ? $admin->getKey() : $adminId;
 
     $adminActivityLog = new AdminActivityLog();
-    $adminActivityLog->admin_id = $adminUserId;
-    $adminActivityLog->activity_description = isset($activityDescription) ? $activityDescription : NULL;
-    $adminActivityLog->save();
 
-    if ($oldVal != NULL) {
-        if ($oldImg != NULL)
+    // Check for column existence to support live DB without changes
+    $tableColumns = \Schema::getColumnListing($adminActivityLog->getTable());
+    if (in_array('admin_id', $tableColumns)) {
+        $adminActivityLog->admin_id = $adminUserId;
+    }
+
+    $adminActivityLog->activity_description = $activityDescription ?? NULL;
+
+    if ($oldVal !== null && $oldVal !== '') {
+        if ($oldImg !== null && is_object($oldVal))
             $oldVal->icon = $oldImg;
         $adminActivityLog->old_value = json_encode($oldVal);
     }
-    if ($newVal != NULL) {
+    if ($newVal !== null && $newVal !== '') {
         $adminActivityLog->new_value = json_encode($newVal);
     }
     $adminActivityLog->save();
-
 }
 
 function compareArray($object1, $object2)
 {
+    if (!is_object($object1) || !is_object($object2)) {
+        return ($object1 != $object2) ? ['change' => true] : [];
+    }
+
     // Convert objects to arrays
-    $array1 = $object1->toArray();
-    $array2 = $object2->toArray();
+    $array1 = method_exists($object1, 'toArray') ? $object1->toArray() : (array) $object1;
+    $array2 = method_exists($object2, 'toArray') ? $object2->toArray() : (array) $object2;
+
+    // Exclude timestamp columns which always change on save
+    $exclude = ['created_at', 'updated_at', 'deleted_at'];
+    foreach ($exclude as $key) {
+        unset($array1[$key], $array2[$key]);
+    }
 
     // Find differences between arrays
-    $differences = array_diff_assoc($array1, $array2);
-
-    return $differences;
+    return array_diff_assoc($array1, $array2);
 }
 
 

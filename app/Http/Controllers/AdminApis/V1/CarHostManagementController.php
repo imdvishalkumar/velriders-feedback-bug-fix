@@ -12,7 +12,8 @@ use Illuminate\Validation\Rule;
 
 class CarHostManagementController extends Controller
 {
-    public function getCarHosts(Request $request){
+    public function getCarHosts(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
         $orderColumn = $request->order_column ?? '';
@@ -28,25 +29,24 @@ class CarHostManagementController extends Controller
         }
 
         $carHosts = CarHost::select('id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'pan_number', 'dob', 'profile_picture_url', 'created_at', 'is_blocked', 'gst_number', 'business_name')->where('is_deleted', 0);
-        
-        if(isset($request->host_id) && $request->host_id != NULL){
+
+        if (isset($request->host_id) && $request->host_id != NULL) {
             $carHosts = $carHosts->where('id', $request->host_id)->first();
-            if($carHosts){
+            if ($carHosts) {
                 $isHostNewUpdatedChanges = isHostNewUpdatedChanges($carHosts->id);
                 $carHosts->is_host_updated_features = $isHostNewUpdatedChanges['newFeatureChanges'];
                 $carHosts->is_host_updated_images = $isHostNewUpdatedChanges['newImageChanges'];
                 $carHosts->is_host_updated_locations = $isHostNewUpdatedChanges['newLocationChanges'];
                 return $this->successResponse($carHosts, 'Carhost get Successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Carhost are not Found');
             }
         }
-        if(isset($search) && $search != ''){
-            $checkHost = CarHost::where('id', (int)$search)->exists();
-            if($checkHost){
+        if (isset($search) && $search != '') {
+            $checkHost = CarHost::where('id', (int) $search)->exists();
+            if ($checkHost) {
                 $carHosts = $carHosts->where('id', $search);
-            }
-            else{
+            } else {
                 $carHosts = $carHosts->where(function ($query) use ($search) {
                     $query->whereRaw('LOWER(country_code) LIKE LOWER(?)', ["%$search%"])
                         ->orWhereRaw('LOWER(mobile_number) LIKE LOWER(?)', ["%$search%"])
@@ -65,29 +65,30 @@ class CarHostManagementController extends Controller
                                 ->where('vehicles.is_deleted', 0)
                                 ->whereRaw('LOWER(vehicles.license_plate) LIKE LOWER(?)', ["%$search%"]);
                         });
-                        // Check if search input is a valid date format (DD-MM-YYYY)
-                        if (preg_match('/^\d{2}-\d{2}-\d{4}$/', $search)) {
-                            try {
-                                $dobFormatted = \Carbon\Carbon::createFromFormat('d-m-Y', $search)->format('Y-m-d');
-                                $query->orWhereDate('dob', $dobFormatted);
-                            } catch (\Exception $e) {}
+                    // Check if search input is a valid date format (DD-MM-YYYY)
+                    if (preg_match('/^\d{2}-\d{2}-\d{4}$/', $search)) {
+                        try {
+                            $dobFormatted = \Carbon\Carbon::createFromFormat('d-m-Y', $search)->format('Y-m-d');
+                            $query->orWhereDate('dob', $dobFormatted);
+                        } catch (\Exception $e) {
                         }
-                        if(strtolower($search) == 'bloked'){
-                            $query->orWhere('is_blocked', 1);
-                        }elseif(strtolower($search) == 'active'){
-                            $query->orWhere('is_blocked', 0);
-                        }
+                    }
+                    if (strtolower($search) == 'bloked') {
+                        $query->orWhere('is_blocked', 1);
+                    } elseif (strtolower($search) == 'active') {
+                        $query->orWhere('is_blocked', 0);
+                    }
                 });
             }
         }
-        if($orderColumn != '' && $orderType != ''){
+        if ($orderColumn != '' && $orderType != '') {
             $carHosts = $carHosts->orderBy($orderColumn, $orderType);
         }
-        
+
         if ($page !== null && $pageSize !== null) {
             $carHosts = $carHosts->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($carHosts) && is_countable($carHosts) && count($carHosts) > 0){
-                foreach($carHosts as $k => $v){
+            if (isset($carHosts) && is_countable($carHosts) && count($carHosts) > 0) {
+                foreach ($carHosts as $k => $v) {
                     $hostStatus = $this->getCustomerStatus($v);
                     $v->status = $hostStatus;
                     $isHostNewUpdatedChanges = isHostNewUpdatedChanges($v->id);
@@ -106,11 +107,12 @@ class CarHostManagementController extends Controller
                     'last_page' => $carHosts->lastPage(),
                     'from' => ($carHosts->currentPage() - 1) * $carHosts->perPage() + 1,
                     'to' => min($carHosts->currentPage() * $carHosts->perPage(), $carHosts->total()),
-                ]], 'Car Hosts fetched successfully');
-        }else{
+                ]
+            ], 'Car Hosts fetched successfully');
+        } else {
             $carHosts = $carHosts->get();
-            if(isset($carHosts) && is_countable($carHosts) && count($carHosts) > 0){
-                foreach($carHosts as $k => $v){
+            if (isset($carHosts) && is_countable($carHosts) && count($carHosts) > 0) {
+                foreach ($carHosts as $k => $v) {
                     $hostStatus = $this->getCustomerStatus($v);
                     $v->status = $hostStatus;
                     $isHostNewUpdatedChanges = isHostNewUpdatedChanges($v->id);
@@ -122,261 +124,414 @@ class CarHostManagementController extends Controller
             $carHosts = [
                 'carHosts' => $carHosts,
             ];
-            if(isset($carHosts) && is_countable($carHosts) && count($carHosts) > 0){
+            if (isset($carHosts) && is_countable($carHosts) && count($carHosts) > 0) {
                 return $this->successResponse($carHosts, 'Car Hosts fetched successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Car Hosts not found');
             }
         }
     }
 
-    public function getCarHostChanges(Request $request){
+    public function getCarHostChanges(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
-        $data = [];
+        $sectionId = $request->input('section_id');
+        $search = $request->input('search');
 
-        $carHostPickupLocationTemp = CarHostPickupLocationTemp::join('car_hosts as h', 'car_host_pickup_location_temps.car_hosts_id', '=', 'h.id')->select('car_host_pickup_location_temps.*','h.firstname','h.lastname','h.mobile_number','h.email');
-        $carHostVehicleFeatureTemp = DB::table('car_host_vehicle_feature_temps as f')
-            ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'f.vehicles_id')
-            ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
-            ->join('vehicle_features as fea', 'fea.feature_id', '=', 'f.feature_id')
-            ->select(
-                'f.vehicles_id',
-                DB::raw('GROUP_CONCAT(fea.name) as features'),
-                DB::raw('MIN(h.id) as host_id'),
-                DB::raw('MIN(h.firstname) as firstname'),
-                DB::raw('MIN(h.lastname) as lastname'),
-                DB::raw('MIN(h.email) as email'),
-                DB::raw('MIN(h.mobile_number) as mobile_number'),
-                DB::raw('MAX(f.created_at) as latest_created_at')
-            )->groupBy('f.vehicles_id');
-        $carHostVehiclesImageTemp = DB::table('car_host_vehicle_image_temps as img')
-            ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'img.vehicles_id')
-            ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
-            ->select(
-                'img.vehicles_id',
-                DB::raw('MAX(h.id) as host_id'),
-                DB::raw('MAX(h.firstname) as firstname'),
-                DB::raw('MAX(h.lastname) as lastname'),
-                DB::raw('MAX(h.email) as email'),
-                DB::raw('MAX(h.mobile_number) as mobile_number'),
-                DB::raw('MAX(img.created_at) as latest_created_at')
-            )->groupBy('img.vehicles_id');
-        $carHostVehicleDetails = Vehicle::
-            join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicles.vehicle_id')
-            ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
-            ->select('vehicles.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email')->where('is_host_updated', 1);
-        $carHostVehicleDocuments = VehicleDocumentTemp::with('vehicle')
-            ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicle_document_temps.vehicle_id')
-            ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id') 
-            ->select('vehicle_document_temps.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email');
-        $VehiclePriceDetailTemp = VehiclePriceDetailTemp::
-            join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicle_price_detail_temps.vehicle_id')
-            ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
-            ->select('vehicle_price_detail_temps.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email');
+        $sectionMap = [
+            'features-list' => 'features',
+            'images-list' => 'images',
+            'location-list' => 'pickup_locations',
+            'vehicle-details-list' => 'vehicle_details',
+            'host-vehicle-documents-list' => 'carHostVehicleDocuments',
+            'vehicle-price-details-list' => 'Price_details',
+        ];
 
-        if ($page !== null && $pageSize !== null) {
-            $carHostPickupLocationTemp = $carHostPickupLocationTemp->orderBy('car_host_pickup_location_temps.created_at', 'DESC')->paginate($pageSize, ['*'], 'page', $page);
-            $carHostPickupLocationTempArray = json_decode(json_encode($carHostPickupLocationTemp->getCollection()->values()), FALSE);
-            $carHostPickupLocationTemp = [
-                'carHostPickupLocations' => $carHostPickupLocationTempArray,
-                'pagination' => [
-                    'total' => $carHostPickupLocationTemp->total(),
-                    'per_page' => $carHostPickupLocationTemp->perPage(),
-                    'current_page' => $carHostPickupLocationTemp->currentPage(),
-                    'last_page' => $carHostPickupLocationTemp->lastPage(),
-                    'from' => ($carHostPickupLocationTemp->currentPage() - 1) * $carHostPickupLocationTemp->perPage() + 1,
-                    'to' => min($carHostPickupLocationTemp->currentPage() * $carHostPickupLocationTemp->perPage(), $carHostPickupLocationTemp->total()),
-                ]
-            ];
-
-            $carHostVehicleFeatureTemp = $carHostVehicleFeatureTemp->orderBy('latest_created_at', 'DESC')->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($carHostVehicleFeatureTemp) && is_countable($carHostVehicleFeatureTemp) && count($carHostVehicleFeatureTemp) > 0){
-                foreach($carHostVehicleFeatureTemp as $k => $v){
-                    $vehicle = Vehicle::where('vehicle_id', $v->vehicles_id)->first();
-                    $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $vehicle;
-                }
-            }
-            $carHostVehicleFeatureTempArray = json_decode(json_encode($carHostVehicleFeatureTemp->getCollection()->values()), FALSE);
-            $carHostVehicleFeatureTemp = [
-                'carHostVehicleFeatures' => $carHostVehicleFeatureTempArray,
-                'pagination' => [
-                    'total' => $carHostVehicleFeatureTemp->total(),
-                    'per_page' => $carHostVehicleFeatureTemp->perPage(),
-                    'current_page' => $carHostVehicleFeatureTemp->currentPage(),
-                    'last_page' => $carHostVehicleFeatureTemp->lastPage(),
-                    'from' => ($carHostVehicleFeatureTemp->currentPage() - 1) * $carHostVehicleFeatureTemp->perPage() + 1,
-                    'to' => min($carHostVehicleFeatureTemp->currentPage() * $carHostVehicleFeatureTemp->perPage(), $carHostVehicleFeatureTemp->total()),
-                ]
-            ];
-
-            $carHostVehiclesImageTemp = $carHostVehiclesImageTemp->orderByDesc('latest_created_at')->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($carHostVehiclesImageTemp) && is_countable($carHostVehiclesImageTemp) && count($carHostVehiclesImageTemp) > 0){
-                foreach($carHostVehiclesImageTemp as $k => $v){
-                    $vehicle = Vehicle::where('vehicle_id', $v->vehicles_id)->first();
-                    $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $vehicle;
-                }
-            }
-            $carHostVehiclesImageTempArray = json_decode(json_encode($carHostVehiclesImageTemp->getCollection()->values()), FALSE);
-            $carHostVehiclesImageTemp = [
-                'carHostVehicleImages' => $carHostVehiclesImageTempArray,
-                'pagination' => [
-                    'total' => $carHostVehiclesImageTemp->total(),
-                    'per_page' => $carHostVehiclesImageTemp->perPage(),
-                    'current_page' => $carHostVehiclesImageTemp->currentPage(),
-                    'last_page' => $carHostVehiclesImageTemp->lastPage(),
-                    'from' => ($carHostVehiclesImageTemp->currentPage() - 1) * $carHostVehiclesImageTemp->perPage() + 1,
-                    'to' => min($carHostVehiclesImageTemp->currentPage() * $carHostVehiclesImageTemp->perPage(), $carHostVehiclesImageTemp->total()),
-                ]
-            ];
-
-            $carHostVehicleDetails = $carHostVehicleDetails->orderBy('updated_at', 'DESC')->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($carHostVehicleDetails) && is_countable($carHostVehicleDetails) && count($carHostVehicleDetails) > 0){
-                foreach($carHostVehicleDetails as $k => $v){
-                    $v->makeHidden('branch_id', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model', 'color', 'host_step_count', 'license_plate', 'rental_price', 'publish', 'vehicle_created_by', 'apply_for_publish', 'temp_city_id', 'deposit_amount','is_deposit_amount_show', 'step_cnt', 'category_name', 'cutout_image', 'location', 'city_name', 'city_id');
-                    $vehicle = Vehicle::where('vehicle_id', $v->vehicle_id)->first();
-                    $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $vehicle;
-                }
-            }
-            $carHostVehicleDetailsArray = json_decode(json_encode($carHostVehicleDetails->getCollection()->values()), FALSE);
-            $carHostVehicleDetails = [
-                'carHostVehicleDetails' => $carHostVehicleDetailsArray,
-                'pagination' => [
-                    'total' => $carHostVehicleDetails->total(),
-                    'per_page' => $carHostVehicleDetails->perPage(),
-                    'current_page' => $carHostVehicleDetails->currentPage(),
-                    'last_page' => $carHostVehicleDetails->lastPage(),
-                    'from' => ($carHostVehicleDetails->currentPage() - 1) * $carHostVehicleDetails->perPage() + 1,
-                    'to' => min($carHostVehicleDetails->currentPage() * $carHostVehicleDetails->perPage(), $carHostVehicleDetails->total()),
-                ]
-            ];
-
-            $carHostVehicleDocuments = $carHostVehicleDocuments->orderBy('vehicle_document_temps.created_at', 'DESC')->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($carHostVehicleDocuments) && is_countable($carHostVehicleDocuments) && count($carHostVehicleDocuments) > 0){
-                foreach($carHostVehicleDocuments as $k => $v){
-                    $v->document_type = ucwords(str_replace('_', ' ', $v->document_type));
-                    $v->makeHidden('is_approved', 'approved_by', 'image_type', 'created_at', 'updated_at');
-                    $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $v->vehicle;
-                }
-            }
-            $carHostVehicleDocumentsArray = json_decode(json_encode($carHostVehicleDocuments->getCollection()->values()), FALSE);
-            $carHostVehicleDocuments = [
-                'carHostVehicleDocuments' => $carHostVehicleDocumentsArray,
-                'pagination' => [
-                    'total' => $carHostVehicleDocuments->total(),
-                    'per_page' => $carHostVehicleDocuments->perPage(),
-                    'current_page' => $carHostVehicleDocuments->currentPage(),
-                    'last_page' => $carHostVehicleDocuments->lastPage(),
-                    'from' => ($carHostVehicleDocuments->currentPage() - 1) * $carHostVehicleDocuments->perPage() + 1,
-                    'to' => min($carHostVehicleDocuments->currentPage() * $carHostVehicleDocuments->perPage(), $carHostVehicleDocuments->total()),
-                ]
-            ];
-            $VehiclePriceDetailTemp = $VehiclePriceDetailTemp->orderBy('created_at','desc')->get()->unique('vehicle_id')->values();
-            if(isset($VehiclePriceDetailTemp) && is_countable($VehiclePriceDetailTemp) && count($VehiclePriceDetailTemp) > 0){
-                foreach($VehiclePriceDetailTemp as $k => $v){
-                    $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $v->vehicle;
-                }
-            }
-            $VehiclePriceDetailTemp = [
-                'carHostVehiclePriceDetails' => $VehiclePriceDetailTemp,
-            ];
-        }else{
-            $carHostPickupLocationTemp = $carHostPickupLocationTemp->orderBy('car_host_pickup_location_temps.created_at', 'DESC')->get();
-            $carHostPickupLocationTemp = [
-                'carHostPickupLocations' => $carHostPickupLocationTemp,
-            ];
-            $carHostVehicleFeatureTemp = $carHostVehicleFeatureTemp->orderBy('latest_created_at', 'DESC')->get();
-            if(isset($carHostVehicleFeatureTemp) && is_countable($carHostVehicleFeatureTemp) && count($carHostVehicleFeatureTemp) > 0){
-                foreach($carHostVehicleFeatureTemp as $k => $v){
-                    $vehicle = Vehicle::where('vehicle_id', $v->vehicles_id)->first();
-                    $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $vehicle;
-                }
-            }
-            $carHostVehicleFeatureTemp = [
-                'carHostVehicleFeatures' => $carHostVehicleFeatureTemp,
-            ];
-            $carHostVehiclesImageTemp = $carHostVehiclesImageTemp->orderByDesc('latest_created_at')->get();
-            if(isset($carHostVehiclesImageTemp) && is_countable($carHostVehiclesImageTemp) && count($carHostVehiclesImageTemp) > 0){
-                foreach($carHostVehiclesImageTemp as $k => $v){
-                    $vehicle = Vehicle::where('vehicle_id', $v->vehicles_id)->first();
-                    $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $vehicle;
-                }
-            }
-            $carHostVehiclesImageTemp = [
-                'carHostVehicleImages' => $carHostVehiclesImageTemp,
-            ];
-
-            $carHostVehicleDetails = $carHostVehicleDetails->orderBy('updated_at', 'DESC')->get();
-            if(isset($carHostVehicleDetails) && is_countable($carHostVehicleDetails) && count($carHostVehicleDetails) > 0){
-                foreach($carHostVehicleDetails as $k => $v){
-                    $v->makeHidden('branch_id', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model', 'color', 'host_step_count', 'license_plate', 'rental_price', 'publish', 'vehicle_created_by', 'apply_for_publish', 'temp_city_id', 'deposit_amount','is_deposit_amount_show', 'step_cnt', 'category_name', 'cutout_image', 'location', 'city_name', 'city_id');
-                    $vehicle = Vehicle::where('vehicle_id', $v->vehicle_id)->first();
-                    $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $vehicle;
-                }
-            }
-            $carHostVehicleDetails = [
-                'carHostVehicleDetails' => $carHostVehicleDetails,
-            ];
-
-            $carHostVehicleDocuments = $carHostVehicleDocuments->orderBy('vehicle_document_temps.created_at', 'DESC')->get()->values();
-            if(isset($carHostVehicleDocuments) && is_countable($carHostVehicleDocuments) && count($carHostVehicleDocuments) > 0){
-                foreach($carHostVehicleDocuments as $k => $v){
-                    $v->document_type = ucwords(str_replace('_', ' ', $v->document_type));
-                    $v->makeHidden('is_approved', 'approved_by', 'image_type', 'created_at', 'updated_at');
-                    $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $v->vehicle;
-                }
-            }
-            $carHostVehicleDocuments = [
-                'carHostVehicleDocuments' => $carHostVehicleDocuments,
-            ];
-
-            $VehiclePriceDetailTemp = $VehiclePriceDetailTemp->orderBy('created_at','desc')->get()->unique('rental_price')->values();
-            if(isset($VehiclePriceDetailTemp) && is_countable($VehiclePriceDetailTemp) && count($VehiclePriceDetailTemp) > 0){
-                foreach($VehiclePriceDetailTemp as $k => $v){
-                    $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                    $v->vehicle = $v->vehicle;
-                }
-            }
-            $VehiclePriceDetailTemp = [
-                'carHostVehiclePriceDetails' => $VehiclePriceDetailTemp,
-            ];
+        if ($request->has('section_id') && !array_key_exists($sectionId, $sectionMap)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid section_id'
+            ], 400);
         }
-        $data['pickup_locations'] = $carHostPickupLocationTemp;
-        $data['features'] = $carHostVehicleFeatureTemp;
-        $data['images'] = $carHostVehiclesImageTemp;
-        $data['vehicle_details'] = $carHostVehicleDetails;
-        $data['carHostVehicleDocuments'] = $carHostVehicleDocuments;
-        $data['Price_details'] = $VehiclePriceDetailTemp;
-      
-        return $this->successResponse($data, 'Host data get successfully');
+
+        $data = [];
+        $isPaginated = ($page !== null && $pageSize !== null);
+
+        // 1. Pickup Locations
+        if (!$sectionId || $sectionId == 'location-list') {
+            $query = CarHostPickupLocationTemp::join('car_hosts as h', 'car_host_pickup_location_temps.car_hosts_id', '=', 'h.id')
+                ->select('car_host_pickup_location_temps.*', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email')
+                ->orderBy('car_host_pickup_location_temps.created_at', 'DESC');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('h.firstname', 'like', "%$search%")
+                        ->orWhere('h.lastname', 'like', "%$search%")
+                        ->orWhere('h.email', 'like', "%$search%")
+                        ->orWhere('h.mobile_number', 'like', "%$search%");
+                });
+            }
+
+            if ($isPaginated) {
+                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
+                $data['pickup_locations'] = [
+                    'carHostPickupLocations' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'pagination' => [
+                        'total' => $paginated->total(),
+                        'per_page' => $paginated->perPage(),
+                        'current_page' => $paginated->currentPage(),
+                        'last_page' => $paginated->lastPage(),
+                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
+                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                    ]
+                ];
+            } else {
+                $data['pickup_locations'] = [
+                    'carHostPickupLocations' => $query->get(),
+                ];
+            }
+        }
+
+        // 2. Features
+        if (!$sectionId || $sectionId == 'features-list') {
+            $query = DB::table('car_host_vehicle_feature_temps as f')
+                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'f.vehicles_id')
+                ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
+                ->join('vehicle_features as fea', 'fea.feature_id', '=', 'f.feature_id')
+                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'f.vehicles_id')
+                ->join('vehicle_models as vm', 'vm.model_id', '=', 'veh.model_id')
+                ->select(
+                    'f.vehicles_id',
+                    DB::raw('GROUP_CONCAT(fea.name) as features'),
+                    DB::raw('MIN(h.id) as host_id'),
+                    DB::raw('MIN(h.firstname) as firstname'),
+                    DB::raw('MIN(h.lastname) as lastname'),
+                    DB::raw('MIN(h.email) as email'),
+                    DB::raw('MIN(h.mobile_number) as mobile_number'),
+                    DB::raw('MAX(f.created_at) as latest_created_at')
+                )->groupBy('f.vehicles_id');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('h.firstname', 'like', "%$search%")
+                        ->orWhere('h.lastname', 'like', "%$search%")
+                        ->orWhere('h.email', 'like', "%$search%")
+                        ->orWhere('veh.license_plate', 'like', "%$search%")
+                        ->orWhere('vm.name', 'like', "%$search%");
+                });
+            }
+
+            if ($isPaginated) {
+                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
+                foreach ($paginated as $v) {
+                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                    if ($vehicle) {
+                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                        $v->vehicle = $vehicle;
+                    }
+                }
+                $data['features'] = [
+                    'carHostVehicleFeatures' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'pagination' => [
+                        'total' => $paginated->total(),
+                        'per_page' => $paginated->perPage(),
+                        'current_page' => $paginated->currentPage(),
+                        'last_page' => $paginated->lastPage(),
+                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
+                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                    ]
+                ];
+            } else {
+                $items = $query->get();
+                foreach ($items as $v) {
+                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                    if ($vehicle) {
+                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                        $v->vehicle = $vehicle;
+                    }
+                }
+                $data['features'] = [
+                    'carHostVehicleFeatures' => $items,
+                ];
+            }
+        }
+
+        // 3. Images
+        if (!$sectionId || $sectionId == 'images-list') {
+            $query = DB::table('car_host_vehicle_image_temps as img')
+                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'img.vehicles_id')
+                ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
+                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'img.vehicles_id')
+                ->join('vehicle_models as vm', 'vm.model_id', '=', 'veh.model_id')
+                ->select(
+                    'img.vehicles_id',
+                    DB::raw('MAX(h.id) as host_id'),
+                    DB::raw('MAX(h.firstname) as firstname'),
+                    DB::raw('MAX(h.lastname) as lastname'),
+                    DB::raw('MAX(h.email) as email'),
+                    DB::raw('MAX(h.mobile_number) as mobile_number'),
+                    DB::raw('MAX(img.created_at) as latest_created_at')
+                )->groupBy('img.vehicles_id');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('h.firstname', 'like', "%$search%")
+                        ->orWhere('h.lastname', 'like', "%$search%")
+                        ->orWhere('h.email', 'like', "%$search%")
+                        ->orWhere('veh.license_plate', 'like', "%$search%")
+                        ->orWhere('vm.name', 'like', "%$search%");
+                });
+            }
+
+            $query->orderByDesc('latest_created_at');
+
+            if ($isPaginated) {
+                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
+                foreach ($paginated as $v) {
+                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                    if ($vehicle) {
+                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                        $v->vehicle = $vehicle;
+                    }
+                }
+                $data['images'] = [
+                    'carHostVehicleImages' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'pagination' => [
+                        'total' => $paginated->total(),
+                        'per_page' => $paginated->perPage(),
+                        'current_page' => $paginated->currentPage(),
+                        'last_page' => $paginated->lastPage(),
+                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
+                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                    ]
+                ];
+            } else {
+                $items = $query->get();
+                foreach ($items as $v) {
+                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                    if ($vehicle) {
+                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                        $v->vehicle = $vehicle;
+                    }
+                }
+                $data['images'] = [
+                    'carHostVehicleImages' => $items,
+                ];
+            }
+        }
+
+        // 4. Vehicle Details
+        if (!$sectionId || $sectionId == 'vehicle-details-list') {
+            $query = Vehicle::join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicles.vehicle_id')
+                ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
+                ->join('vehicle_models as vm', 'vm.model_id', '=', 'vehicles.model_id')
+                ->select('vehicles.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email')
+                ->with('model.manufacturer')
+                ->where('is_host_updated', 1);
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('h.firstname', 'like', "%$search%")
+                        ->orWhere('h.lastname', 'like', "%$search%")
+                        ->orWhere('h.email', 'like', "%$search%")
+                        ->orWhere('vehicles.license_plate', 'like', "%$search%")
+                        ->orWhere('vm.name', 'like', "%$search%");
+                });
+            }
+
+            $query->orderBy('updated_at', 'DESC');
+
+            if ($isPaginated) {
+                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
+                foreach ($paginated as $v) {
+                    $v->makeHidden('branch_id', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model', 'color', 'host_step_count', 'license_plate', 'rental_price', 'publish', 'vehicle_created_by', 'apply_for_publish', 'temp_city_id', 'deposit_amount', 'is_deposit_amount_show', 'step_cnt', 'category_name', 'cutout_image', 'location', 'city_name', 'city_id');
+                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicle_id)->first();
+                    if ($vehicle) {
+                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                        $v->vehicle = $vehicle;
+                    }
+                }
+                $data['vehicle_details'] = [
+                    'carHostVehicleDetails' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'pagination' => [
+                        'total' => $paginated->total(),
+                        'per_page' => $paginated->perPage(),
+                        'current_page' => $paginated->currentPage(),
+                        'last_page' => $paginated->lastPage(),
+                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
+                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                    ]
+                ];
+            } else {
+                $items = $query->get();
+                foreach ($items as $v) {
+                    $v->makeHidden('branch_id', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model', 'color', 'host_step_count', 'license_plate', 'rental_price', 'publish', 'vehicle_created_by', 'apply_for_publish', 'temp_city_id', 'deposit_amount', 'is_deposit_amount_show', 'step_cnt', 'category_name', 'cutout_image', 'location', 'city_name', 'city_id');
+                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicle_id)->first();
+                    if ($vehicle) {
+                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                        $v->vehicle = $vehicle;
+                    }
+                }
+                $data['vehicle_details'] = [
+                    'carHostVehicleDetails' => $items,
+                ];
+            }
+        }
+
+        // 5. Documents
+        if (!$sectionId || $sectionId == 'host-vehicle-documents-list') {
+            $query = VehicleDocumentTemp::with('vehicle.model.manufacturer')
+                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicle_document_temps.vehicle_id')
+                ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
+                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'vehicle_document_temps.vehicle_id')
+                ->join('vehicle_models as vm', 'vm.model_id', '=', 'veh.model_id')
+                ->select('vehicle_document_temps.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('h.firstname', 'like', "%$search%")
+                        ->orWhere('h.lastname', 'like', "%$search%")
+                        ->orWhere('h.email', 'like', "%$search%")
+                        ->orWhere('veh.license_plate', 'like', "%$search%")
+                        ->orWhere('vm.name', 'like', "%$search%");
+                });
+            }
+
+            $query->orderBy('vehicle_document_temps.created_at', 'DESC');
+
+            if ($isPaginated) {
+                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
+                foreach ($paginated as $v) {
+                    $v->document_type = ucwords(str_replace('_', ' ', $v->document_type));
+                    $v->makeHidden('is_approved', 'approved_by', 'image_type', 'created_at', 'updated_at');
+                    if ($v->vehicle) {
+                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    }
+                }
+                $data['carHostVehicleDocuments'] = [
+                    'carHostVehicleDocuments' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'pagination' => [
+                        'total' => $paginated->total(),
+                        'per_page' => $paginated->perPage(),
+                        'current_page' => $paginated->currentPage(),
+                        'last_page' => $paginated->lastPage(),
+                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
+                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                    ]
+                ];
+            } else {
+                $items = $query->get()->values();
+                foreach ($items as $v) {
+                    $v->document_type = ucwords(str_replace('_', ' ', $v->document_type));
+                    $v->makeHidden('is_approved', 'approved_by', 'image_type', 'created_at', 'updated_at');
+                    if ($v->vehicle) {
+                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    }
+                }
+                $data['carHostVehicleDocuments'] = [
+                    'carHostVehicleDocuments' => $items,
+                ];
+            }
+        }
+
+        // 6. Price Details
+        if (!$sectionId || $sectionId == 'vehicle-price-details-list') {
+            $query = VehiclePriceDetailTemp::with('vehicle.model.manufacturer')
+                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicle_price_detail_temps.vehicle_id')
+                ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
+                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'vehicle_price_detail_temps.vehicle_id')
+                ->join('vehicle_models as vm', 'vm.model_id', '=', 'veh.model_id')
+                ->select('vehicle_price_detail_temps.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('h.firstname', 'like', "%$search%")
+                        ->orWhere('h.lastname', 'like', "%$search%")
+                        ->orWhere('h.email', 'like', "%$search%")
+                        ->orWhere('veh.license_plate', 'like', "%$search%")
+                        ->orWhere('vm.name', 'like', "%$search%");
+                });
+            }
+
+            $query->orderBy('created_at', 'desc');
+
+            // Prices are not paginated using standard approach in current code, maintaining that logic
+            if ($isPaginated) {
+                $items = $query->get()->unique('vehicle_id')->values();
+                foreach ($items as $v) {
+                    if ($v->vehicle) {
+                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    }
+                }
+                $data['Price_details'] = [
+                    'carHostVehiclePriceDetails' => $items,
+                ];
+            } else {
+                $items = $query->get()->unique('rental_price')->values(); // Original code used 'rental_price' here
+                foreach ($items as $v) {
+                    if ($v->vehicle) {
+                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    }
+                }
+                $data['Price_details'] = [
+                    'carHostVehiclePriceDetails' => $items,
+                ];
+            }
+        }
+
+        $message = 'Host data get successfully';
+        if ($sectionId) {
+            $labels = [
+                'features-list' => 'Features',
+                'images-list' => 'Images',
+                'location-list' => 'Pickup Locations',
+                'vehicle-details-list' => 'Vehicle Details',
+                'host-vehicle-documents-list' => 'Documents',
+                'vehicle-price-details-list' => 'Price Details',
+            ];
+            $message = ($labels[$sectionId] ?? 'Host') . ' data fetched successfully';
+        }
+
+        return $this->successResponse($data, $message);
     }
 
-    public function getUnpublishVehices(Request $request){
+    public function getUnpublishVehices(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
+        $search = $request->input('search');
 
-        $vehicle = Vehicle::select('vehicle_id', 'model_id', 'year', 'description', 'color', 'license_plate', 'rental_price', 'apply_for_publish', 'publish')->where('publish', 0)->where('apply_for_publish', 1)->where('is_deleted', 0)->with('vehicleEligibility.carHost:id,country_code,mobile_number,email,firstname,lastname,dob,business_name,gst_number');
+        $query = Vehicle::join('vehicle_models as vm', 'vm.model_id', '=', 'vehicles.model_id')
+            ->leftJoin('cities as c', 'c.id', '=', 'vehicles.temp_city_id')
+            ->select('vehicles.vehicle_id', 'vehicles.model_id', 'vehicles.year', 'vehicles.description', 'vehicles.color', 'vehicles.license_plate', 'vehicles.rental_price', 'vehicles.apply_for_publish', 'vehicles.publish')
+            ->where('vehicles.publish', 0)
+            ->where('vehicles.apply_for_publish', 1)
+            ->where('vehicles.is_deleted', 0)
+            ->with('vehicleEligibility.carHost:id,country_code,mobile_number,email,firstname,lastname,dob,business_name,gst_number');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('vehicles.vehicle_id', 'like', "%$search%")
+                    ->orWhere('vehicles.license_plate', 'like', "%$search%")
+                    ->orWhere('vm.name', 'like', "%$search%")
+                    ->orWhere('c.name', 'like', "%$search%");
+            });
+        }
 
         if ($page !== null && $pageSize !== null) {
-            $vehicle = $vehicle->paginate($pageSize, ['*'], 'page', $page);
-            if(isset($vehicle) && is_countable($vehicle) && count($vehicle) > 0 ){
-                foreach($vehicle as $k => $v){
-                    $v->hostid = $v->vehicleEligibility->carHost->id;
-                    $v->firstname = $v->vehicleEligibility->carHost->firstname;
-                    $v->lastname = $v->vehicleEligibility->carHost->lastname;
-                    $v->email = $v->vehicleEligibility->carHost->email;
-                    $v->mobile_number = $v->vehicleEligibility->carHost->mobile_number;
+            $vehicle = $query->paginate($pageSize, ['*'], 'page', $page);
+            if (isset($vehicle) && is_countable($vehicle) && count($vehicle) > 0) {
+                foreach ($vehicle as $k => $v) {
+                    if ($v->vehicleEligibility && $v->vehicleEligibility->carHost) {
+                        $v->hostid = $v->vehicleEligibility->carHost->id;
+                        $v->firstname = $v->vehicleEligibility->carHost->firstname;
+                        $v->lastname = $v->vehicleEligibility->carHost->lastname;
+                        $v->email = $v->vehicleEligibility->carHost->email;
+                        $v->mobile_number = $v->vehicleEligibility->carHost->mobile_number;
+                    }
                     $v->is_publish = $v->publish != 0 ? 1 : 0;
-                    $v->makeHidden('banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'location', 'model','vehicleEligibility');
+                    $v->makeHidden('banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'location', 'model', 'vehicleEligibility');
                 }
             }
             $vehicleArray = json_decode(json_encode($vehicle->getCollection()->values()), FALSE);
@@ -391,15 +546,17 @@ class CarHostManagementController extends Controller
                     'to' => min($vehicle->currentPage() * $vehicle->perPage(), $vehicle->total()),
                 ]
             ];
-        }else{
-            $vehicle = $vehicle->get();
-            if(isset($vehicle) && is_countable($vehicle) && count($vehicle) > 0 ){
-                foreach($vehicle as $k => $v){
-                    $v->hostid = $v->vehicleEligibility->carHost->id;
-                    $v->firstname = $v->vehicleEligibility->carHost->firstname;
-                    $v->lastname = $v->vehicleEligibility->carHost->lastname;
-                    $v->email = $v->vehicleEligibility->carHost->email;
-                    $v->mobile_number = $v->vehicleEligibility->carHost->mobile_number;
+        } else {
+            $vehicle = $query->get();
+            if (isset($vehicle) && is_countable($vehicle) && count($vehicle) > 0) {
+                foreach ($vehicle as $k => $v) {
+                    if ($v->vehicleEligibility && $v->vehicleEligibility->carHost) {
+                        $v->hostid = $v->vehicleEligibility->carHost->id;
+                        $v->firstname = $v->vehicleEligibility->carHost->firstname;
+                        $v->lastname = $v->vehicleEligibility->carHost->lastname;
+                        $v->email = $v->vehicleEligibility->carHost->email;
+                        $v->mobile_number = $v->vehicleEligibility->carHost->mobile_number;
+                    }
                     $v->is_publish = $v->publish != 0 ? 1 : 0;
                     $v->makeHidden('banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'location', 'model', 'vehicleEligibility');
                 }
@@ -409,12 +566,13 @@ class CarHostManagementController extends Controller
             ];
         }
 
-        return $this->successResponse($vehicle, 'Vehicles data get successfully');
+        return $this->successResponse($vehicle, 'Wait for Publish Vehicles');
     }
 
-    public function createOrUpdateCarHost(Request $request){
+    public function createOrUpdateCarHost(Request $request)
+    {
         $oldVal = $newVal = '';
-        $carHostId = $request->input('car_host_id'); 
+        $carHostId = $request->input('car_host_id');
         $rules = [
             'car_host_id' => 'nullable|exists:car_hosts,id',
             'firstname' => 'required|max:100',
@@ -429,21 +587,29 @@ class CarHostManagementController extends Controller
             'bank_name' => 'nullable|max:200',
         ];
         $rules['mobile_number'] = $carHostId
-            ? ['numeric', 'digits_between:8,15', Rule::unique('car_hosts', 'mobile_number')->ignore($carHostId)->where(function ($query) {
-                $query->where('is_deleted', 0);
-            })]
-            : ['numeric', 'digits_between:8,15', Rule::unique('car_hosts', 'mobile_number')->where(function ($query) {
-                $query->where('is_deleted', 0);
-            })];
+            ? [
+                'numeric',
+                'digits_between:8,15',
+                Rule::unique('car_hosts', 'mobile_number')->ignore($carHostId)->where(function ($query) {
+                    $query->where('is_deleted', 0);
+                })
+            ]
+            : [
+                'numeric',
+                'digits_between:8,15',
+                Rule::unique('car_hosts', 'mobile_number')->where(function ($query) {
+                    $query->where('is_deleted', 0);
+                })
+            ];
 
         $validator = Validator::make($request->all(), $rules);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
-        if(isset($request->car_host_id) && $request->car_host_id != ''){
+        if (isset($request->car_host_id) && $request->car_host_id != '') {
             $carHost = CarHost::where('id', $request->car_host_id)->first();
             $oldVal = clone $carHost;
-        }else{
+        } else {
             $carHost = new CarHost();
             $carHost->is_blocked = 1;
         }
@@ -459,23 +625,26 @@ class CarHostManagementController extends Controller
 
         if ($request->hasFile('profile_picture_url')) {
             $file = $request->file('profile_picture_url');
-            $filename = 'Carhost_userprofile_'.$carHost->id.'_'.time() . '.' . $file->getClientOriginalExtension();
+            $filename = 'Carhost_userprofile_' . $carHost->id . '_' . time() . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('images/profile_pictures'), $filename);
             $carHost->profile_picture_url = $filename;
             $carHost->save();
         }
         $newVal = $carHost;
-        if(isset($request->car_host_id) && $request->car_host_id != ''){
-            logAdminActivities("Carhost Updated Successfully", $oldVal, $newVal);
+        if (!empty($request->car_host_id)) {
+            $differences = compareArray($oldVal, $newVal);
+            if (isset($differences) && is_countable($differences) && count($differences) > 0) {
+                logAdminActivities("Carhost Updated Successfully", $oldVal, $newVal);
+            }
             return $this->successResponse($carHost, 'Car host updated Successfully');
-        }
-        else{
+        } else {
             logAdminActivities('Carhost added successfully', $newVal);
             return $this->successResponse($carHost, 'Car host added Successfully');
         }
     }
 
-    public function blockUnblockCarHost(Request $request){
+    public function blockUnblockCarHost(Request $request)
+    {
         $oldVal = $newVal = '';
         $validator = Validator::make($request->all(), [
             'car_host_id' => 'required|exists:car_hosts,id',
@@ -486,33 +655,56 @@ class CarHostManagementController extends Controller
         }
         $carHost = CarHost::where('id', $request->car_host_id)->first();
         $oldVal = clone $carHost;
-        if(isset($carHost) && $carHost != ''){
-            if($request->status == 1){ // BLock
+        if (isset($carHost) && $carHost != '') {
+            if ($request->status == 1) { // BLock
                 $carHost->is_blocked = 1;
                 $carHost->save();
                 $newVal = $carHost;
                 logAdminActivities('Carhost Blocked Successfully', $oldVal, $newVal);
                 return $this->successResponse(null, 'Car host blocked Successfully');
-            }elseif($request->status == 0){ // Un-Block
+            } elseif ($request->status == 0) { // Un-Block
                 $carHostPickupLocationCheck = CarHostPickupLocation::where('car_hosts_id', $request->car_host_id)->where('is_primary', 1)->exists();
-                if($carHostPickupLocationCheck){
+                if ($carHostPickupLocationCheck) {
                     $carHost->is_blocked = 0;
                     $carHost->save();
                     $newVal = $carHost;
                     logAdminActivities('Carhost Un-blocked Successfully', $oldVal, $newVal);
                     return $this->successResponse(null, 'Car host Un-blocked Sucessfully');
-                }else{
+                } else {
                     return $this->errorResponse('You are required to add at least one pickup location (as Primary) for this host to un-block this car host.');
-                }   
-            }else{
+                }
+            } else {
                 return $this->errorResponse('Please add valid status');
             }
-        }else{
+        } else {
             return $this->errorResponse('Carhost not Found');
         }
     }
 
-    public function getCarHostPickupLocation(Request $request){
+    public function deleteCarHost(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'car_host_id' => 'required|exists:car_hosts,id',
+        ]);
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $carHost = CarHost::where('id', $request->car_host_id)->first();
+        if ($carHost) {
+            $carHost->is_deleted = 1;
+            $carHost->save();
+
+            logAdminActivities('Carhost Deletion', $carHost);
+
+            return $this->successResponse(null, 'Carhost deleted successfully');
+        } else {
+            return $this->errorResponse('Carhost not found');
+        }
+    }
+
+    public function getCarHostPickupLocation(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'carhost_id' => 'required|exists:car_hosts,id',
             'pickup_location_id' => 'nullable|exists:car_host_pickup_locations,id'
@@ -521,29 +713,30 @@ class CarHostManagementController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $carHostPickupLocations = CarHostPickupLocation::where('car_hosts_id', $request->carhost_id)->with('carHostParkingVehicleImgs')->where('is_deleted', 0);
-        if(isset($request->pickup_location_id) && $request->pickup_location_id != ''){
+        if (isset($request->pickup_location_id) && $request->pickup_location_id != '') {
             $carHostPickupLocations = $carHostPickupLocations->where('id', $request->pickup_location_id);
         }
         $carHostPickupLocations = $carHostPickupLocations->get();
-        if(isset($carHostPickupLocations) && is_countable($carHostPickupLocations) && count($carHostPickupLocations) > 0){
-            foreach($carHostPickupLocations as $key => $val){
+        if (isset($carHostPickupLocations) && is_countable($carHostPickupLocations) && count($carHostPickupLocations) > 0) {
+            foreach ($carHostPickupLocations as $key => $val) {
                 $checkLocations = CarHostPickupLocationTemp::where('car_host_pickup_locations_id', $val->id)->exists();
                 $val->is_show_approve_icon = $checkLocations;
 
                 $isVehicleUsed = CarEligibility::where('car_host_pickup_location_id', $val->id)->exists();
-                if($isVehicleUsed){
+                if ($isVehicleUsed) {
                     $val->is_assign_to_vehicle = true;
-                }else{
+                } else {
                     $val->is_assign_to_vehicle = false;
                 }
             }
             return $this->successResponse($carHostPickupLocations);
-        }else{
+        } else {
             return $this->errorResponse("Host Location deails are not found");
         }
     }
 
-    public function addUpdateCarHostPickuplocation(Request $request){
+    public function addUpdateCarHostPickuplocation(Request $request)
+    {
         $parkingTypes = config('global_values.vehicle_parking_type');
         $parkingTypes = array_keys($parkingTypes);
         $parkingTypes = implode(',', $parkingTypes);
@@ -554,9 +747,10 @@ class CarHostManagementController extends Controller
             'latitude' => 'required',
             'longitude' => 'required',
             'location' => 'required|max:500',
-            'parking_type' => 'required|in:'.$parkingTypes, 
+            'parking_type' => 'required|in:' . $parkingTypes,
             'parking_spot_imgs' => 'nullable|array',
-            'parking_spot_imgs.*' => ['max:5000',
+            'parking_spot_imgs.*' => [
+                'max:5000',
                 function ($attribute, $value, $fail) {
                     if ($value instanceof \Illuminate\Http\UploadedFile) {
                         if (!$value->isValid()) {
@@ -574,8 +768,8 @@ class CarHostManagementController extends Controller
                         $fail("$attribute must be an uploaded image or a valid image URL.");
                     }
                 }
-            ], 
-        ],[
+            ],
+        ], [
             'parking_spot_imgs.*.max' => 'Parking Spot image size must be less than 5MB',
         ]);
         $validator->sometimes(['parking_spot_imgs'], 'required', function ($input) {
@@ -584,48 +778,48 @@ class CarHostManagementController extends Controller
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
-        
+
         $checkLocationCnt = CarHostPickupLocation::where('car_hosts_id', $request->car_host_id)->where('is_deleted', 0)->count();
-        if($request->car_pickup_location_id == ''){
-            if($checkLocationCnt >= 2){
+        if ($request->car_pickup_location_id == '') {
+            if ($checkLocationCnt >= 2) {
                 return $this->errorResponse('You can not add more than 2 host Pickup Locations');
             }
         }
 
         $oldVal = $newVal = '';
-        if(isset($request->car_pickup_location_id) && $request->car_pickup_location_id != ''){
+        if (isset($request->car_pickup_location_id) && $request->car_pickup_location_id != '') {
             $carPickupLocation = CarHostPickupLocation::where('id', $request->car_pickup_location_id)->first();
             $oldVal = clone $carPickupLocation;
-        }else{
-            $carPickupLocation = new CarHostPickupLocation();    
+        } else {
+            $carPickupLocation = new CarHostPickupLocation();
             $carPickupLocation->car_hosts_id = $request->car_host_id;
         }
-        
-        if($checkLocationCnt == 0){
+
+        if ($checkLocationCnt == 0) {
             $carPickupLocation->is_primary = 1;
         }
 
         $carPickupLocation->latitude = $request->latitude;
         $carPickupLocation->longitude = $request->longitude;
         $carPickupLocation->location = $request->location;
-        $carPickupLocation->parking_type_id = (int)$request->parking_type;
-        if($request->latitude != '' && $request->longitude != ''){
+        $carPickupLocation->parking_type_id = (int) $request->parking_type;
+        if ($request->latitude != '' && $request->longitude != '') {
             $nearestBranch = City::nearest($request->latitude, $request->longitude);
             $carPickupLocation->city_id = $nearestBranch->id ?? '';
             $carPickupLocation->name = $nearestBranch->name ?? '';
         }
-       $carPickupLocation->save();
-        if(isset($request->vehicle_id) && $request->vehicle_id != ''){
+        $carPickupLocation->save();
+        if (isset($request->vehicle_id) && $request->vehicle_id != '') {
             $vehicle = CarEligibility::where('vehicle_id', $request->vehicle_id)->first();
-            if($vehicle != '' && $vehicle->car_host_pickup_location_id == NULL){
+            if ($vehicle != '' && $vehicle->car_host_pickup_location_id == NULL) {
                 $vehicle->car_host_pickup_location_id = $carPickupLocation->id;
                 $vehicle->save();
             }
         }
 
-        if(is_countable($request->file('parking_spot_imgs')) && count($request->file('parking_spot_imgs')) > 0){
+        if (is_countable($request->file('parking_spot_imgs')) && count($request->file('parking_spot_imgs')) > 0) {
             foreach ($request->file('parking_spot_imgs') as $key => $image) {
-                $filename = 'ParkingSpot_'.$carPickupLocation->id.'_'.$key.'_'.time() . '.' . $image->getClientOriginalExtension();
+                $filename = 'ParkingSpot_' . $carPickupLocation->id . '_' . $key . '_' . time() . '.' . $image->getClientOriginalExtension();
                 $image->move(public_path('images/car_host'), $filename);
                 $carHostVehicleImage = new CarHostVehicleImage();
                 $carHostVehicleImage->car_host_pickup_locations_id = $carPickupLocation->id;
@@ -636,9 +830,9 @@ class CarHostManagementController extends Controller
         }
         $newVal = $carPickupLocation;
 
-        if(isset($request->car_pickup_location_id) && $request->car_pickup_location_id != ''){
+        if (isset($request->car_pickup_location_id) && $request->car_pickup_location_id != '') {
             logAdminActivities('Carhost pickup location updated successfuly', $oldVal, $newVal);
-        }else{
+        } else {
             logAdminActivities('Carhost pickup location added successfuly', $newVal);
         }
 
@@ -648,7 +842,8 @@ class CarHostManagementController extends Controller
         return $this->successResponse($carPickupLocation, 'Vehicle Pickup location added successfully');
     }
 
-    public function setPrimaryCarHostPickuplocation(Request $request){
+    public function setPrimaryCarHostPickuplocation(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'car_host_pickup_location_id' => 'required|exists:car_host_pickup_locations,id',
         ]);
@@ -659,11 +854,11 @@ class CarHostManagementController extends Controller
         $oldVal = '';
         $carHostPickupLocation = CarHostPickupLocation::where('id', $request->car_host_pickup_location_id)->first();
         $oldVal = clone $carHostPickupLocation;
-        if(isset($carHostPickupLocation) && $carHostPickupLocation != ''){
+        if (isset($carHostPickupLocation) && $carHostPickupLocation != '') {
             $getCarHostLocation = CarHostPickupLocation::where('car_hosts_id', $carHostPickupLocation->car_hosts_id)->get();
-            if(isset($getCarHostLocation) && is_countable($getCarHostLocation) && count($getCarHostLocation) > 0){
-                foreach($getCarHostLocation as $key => $value){
-                    if($value->id != $request->car_host_pickup_location_id){
+            if (isset($getCarHostLocation) && is_countable($getCarHostLocation) && count($getCarHostLocation) > 0) {
+                foreach ($getCarHostLocation as $key => $value) {
+                    if ($value->id != $request->car_host_pickup_location_id) {
                         $value->is_primary = 2; // Not Primary
                         $value->save();
                     }
@@ -672,14 +867,15 @@ class CarHostManagementController extends Controller
             $carHostPickupLocation->is_primary = 1;
             $carHostPickupLocation->save();
 
-            logAdminActivities('Set car host pickup location as Primary', $oldVal);
+            logAdminActivities('Set car host pickup location as Primary', $oldVal, $carHostPickupLocation);
             return $this->successResponse($carHostPickupLocation, 'Car host Pickup Location set as Primary Successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost Pickup Location not Found');
         }
     }
 
-    public function deleteHostPickuplocation(Request $request){
+    public function deleteHostPickuplocation(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'host_pickup_location_id' => 'required|exists:car_host_pickup_locations,id',
         ]);
@@ -687,31 +883,32 @@ class CarHostManagementController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $oldVal = '';
-        $checkVehicle = CarEligibility::where('car_host_pickup_location_id', $request->host_pickup_location_id)->whereHas('vehicle', function($q){
+        $checkVehicle = CarEligibility::where('car_host_pickup_location_id', $request->host_pickup_location_id)->whereHas('vehicle', function ($q) {
             $q->where('is_deleted', 0);
         })->first();
-        if($checkVehicle == ''){
+        if ($checkVehicle == '') {
             $carHostPickupLocation = CarHostPickupLocation::where('id', $request->host_pickup_location_id)->first();
             $oldVal = clone $carHostPickupLocation;
-            if($carHostPickupLocation != ''){
-                if($carHostPickupLocation->is_primary == 1){
+            if ($carHostPickupLocation != '') {
+                if ($carHostPickupLocation->is_primary == 1) {
                     return $this->errorResponse('You can delete only non-primary location');
-                }else{
+                } else {
                     $carHostPickupLocation->is_deleted = 1;
                     $carHostPickupLocation->save();
 
                     logAdminActivities('Delete Host Pickup location', $oldVal);
                     return $this->successResponse($carHostPickupLocation, 'Location deleted successfully');
                 }
-            }else{
+            } else {
                 return $this->errorResponse('Location not found');
             }
-        }else{
+        } else {
             return $this->errorResponse("You can't delete this location due to its assign with any Vehicle");
         }
     }
 
-    public function deleteHostPickuplocationImage(Request $request){
+    public function deleteHostPickuplocationImage(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'car_host_vehicle_img_id' => 'required|exists:car_host_vehicle_images,id',
         ]);
@@ -721,20 +918,21 @@ class CarHostManagementController extends Controller
         $oldVal = '';
         $carHostVehicleImage = CarHostVehicleImage::where('id', $request->car_host_vehicle_img_id)->first();
         $oldVal = clone $carHostVehicleImage;
-        if(isset($carHostVehicleImage) && $carHostVehicleImage != ''){
-            $filePath = public_path().'/images/car_host/'.basename($carHostVehicleImage->vehicle_img);
-                if(file_exists($filePath)){
-                    unlink($filePath);
-                }
-                $carHostVehicleImage->delete();
-                logAdminActivities("Host Pickup location images Deletion", $oldVal);
+        if (isset($carHostVehicleImage) && $carHostVehicleImage != '') {
+            $filePath = public_path() . '/images/car_host/' . basename($carHostVehicleImage->vehicle_img);
+            if (file_exists($filePath)) {
+                unlink($filePath);
+            }
+            $carHostVehicleImage->delete();
+            logAdminActivities("Host Pickup location images Deletion", $oldVal);
             return $this->successResponse(null, 'Car host Pickup Location deleted Successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost Pickup Location not Found');
         }
     }
 
-    public function getHostBankDetails(Request $request){
+    public function getHostBankDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'bank_id' => 'nullable|exists:car_host_banks,id',
             'host_id' => 'required|exists:car_hosts,id',
@@ -744,24 +942,25 @@ class CarHostManagementController extends Controller
         }
         $user = '';
         $carHostBank = CarHostBank::where('car_hosts_id', $request->host_id)->where('is_deleted', 0);
-        if(isset($request->bank_id) && $request->bank_id != ''){
+        if (isset($request->bank_id) && $request->bank_id != '') {
             $carHostBank = $carHostBank->where('id', $request->bank_id);
         }
         $carHostBank = $carHostBank->get();
-        if(is_countable($carHostBank) && count($carHostBank) > 0){
+        if (is_countable($carHostBank) && count($carHostBank) > 0) {
             foreach ($carHostBank as $key => $value) {
-                $value->car_hosts_id = (string)$value->car_hosts_id;
-                if(isset($value->passbook_image) && $value->passbook_image != ''){
-                    $value->passbook_image = url('host_bank_document').'/'.$value->passbook_image;
+                $value->car_hosts_id = (string) $value->car_hosts_id;
+                if (isset($value->passbook_image) && $value->passbook_image != '') {
+                    $value->passbook_image = url('host_bank_document') . '/' . $value->passbook_image;
                 }
             }
             return $this->successResponse($carHostBank, 'Carhost Bank details are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost bank details are not found');
         }
     }
 
-    public function storeHostBankDetails(Request $request){
+    public function storeHostBankDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'bank_id' => 'nullable|exists:car_host_banks,id',
             'car_host_id' => 'required|exists:car_hosts,id',
@@ -781,19 +980,21 @@ class CarHostManagementController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $carHostBank = '';
-        if($request->bank_id == ''){
+        $oldVal = '';
+        if ($request->bank_id == '') {
             $checkBankCnt = CarHostBank::where('car_hosts_id', $request->car_host_id)->where('is_deleted', 0)->count();
-            if($checkBankCnt >= 2){
+            if ($checkBankCnt >= 2) {
                 return $this->errorResponse('You can not add more than 2 Banks');
             }
             $checkBank = CarHostBank::where(['car_hosts_id' => $request->car_host_id, 'is_deleted' => 0, 'account_no' => $request->account_no, 'ifsc_code' => $request->ifsc_code])->exists();
-            if($checkBank){
+            if ($checkBank) {
                 return $this->errorResponse('Already Existed');
             }
             $carHostBank = new CarHostBank();
             $carHostBank->car_hosts_id = $request->car_host_id;
-        }else{
-            $carHostBank = CarHostBank::where('id', $request->bank_id)->where('is_deleted', 0)->first();    
+        } else {
+            $carHostBank = CarHostBank::where('id', $request->bank_id)->where('is_deleted', 0)->first();
+            $oldVal = clone $carHostBank;
         }
         $bankStatus = false;
         $carHostBank->account_holder_name = $request->account_holder_name;
@@ -802,43 +1003,53 @@ class CarHostManagementController extends Controller
         $carHostBank->city = $request->city;
         $carHostBank->account_no = $request->account_no;
         $carHostBank->ifsc_code = $request->ifsc_code;
-        $carHostBank->nick_name = isset($request->nick_name)?$request->nick_name:NULL;
+        $carHostBank->nick_name = isset($request->nick_name) ? $request->nick_name : NULL;
         if ($request->hasFile('passbook_image')) {
             $file = $request->file('passbook_image');
-            $filename = 'hostbank_'.$carHostBank->id.'_'.time().'_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $filename = 'hostbank_' . $carHostBank->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('host_bank_document'), $filename);
             $carHostBank->passbook_image = $filename;
         }
         $primaryStatus = $request->is_primary;
         $carHostBankCheck = CarHostBank::where('car_hosts_id', $request->car_host_id)->where('is_deleted', 0)->count();
-        if($carHostBankCheck == 0){
+        if ($carHostBankCheck == 0) {
             $primaryStatus = 1;
             $carHostBank->is_primary = $request->is_primary;
             $bankStatus = true;
         }
-        if(isset($request->is_primary) && $request->is_primary == 1){
-            CarHostBank::where('car_hosts_id', $request->car_host_id)->where('id', '!=', $carHostBank->id)->update(['is_primary'=> 2]);
+        if (isset($request->is_primary) && $request->is_primary == 1) {
+            CarHostBank::where('car_hosts_id', $request->car_host_id)->where('id', '!=', $carHostBank->id)->update(['is_primary' => 2]);
             $carHostBank->is_primary = $request->is_primary;
             $bankStatus = true;
-        }elseif(isset($request->is_primary) && $request->is_primary == 2){
+        } elseif (isset($request->is_primary) && $request->is_primary == 2) {
             $hostBank = CarHostBank::where('car_hosts_id', $request->car_host_id)->where('id', '!=', $carHostBank->id)->where('is_primary', 1)->first();
-            if($hostBank != ''){
+            if ($hostBank != '') {
                 $carHostBank->is_primary = $request->is_primary;
                 $bankStatus = true;
-            }elseif($carHostBankCheck == 0){
+            } elseif ($carHostBankCheck == 0) {
                 $carHostBank->is_primary = 1;
                 $bankStatus = true;
             }
         }
-        if($bankStatus == true){
+        if ($bankStatus == true) {
             $carHostBank->save();
+            if (empty($request->bank_id)) {
+                logAdminActivities("Carhost Bank added successfully", $carHostBank);
+            } else {
+                $newVal = $carHostBank;
+                $differences = compareArray($oldVal, $newVal);
+                if (isset($differences) && is_countable($differences) && count($differences) > 0) {
+                    logAdminActivities("Carhost Bank updated successfully", $oldVal, $newVal);
+                }
+            }
             return $this->successResponse($carHostBank, 'Carhost Bank details are stored successfully');
-        }else{
+        } else {
             return $this->errorResponse('Please make any one Bank as primary first');
         }
     }
 
-    public function deleteHostBank(Request $request){
+    public function deleteHostBank(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'bank_id' => 'required|exists:car_host_banks,id',
         ]);
@@ -846,21 +1057,24 @@ class CarHostManagementController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $carHostBank = CarHostBank::where('id', $request->bank_id)->first();
-        if($carHostBank != ''){
+        if ($carHostBank != '') {
             $checkPrimaryBank = CarHostBank::where(['id' => $request->bank_id, 'is_primary' => 1])->first();
-            if($checkPrimaryBank == ''){
+            if ($checkPrimaryBank == '') {
+                $oldVal = clone $carHostBank;
                 $carHostBank->is_deleted = 1;
                 $carHostBank->save();
+                logAdminActivities("Carhost Bank deleted successfully", $oldVal);
                 return $this->successResponse($carHostBank, 'Carhost Bank details are deleted successfully');
-            }else{
+            } else {
                 return $this->errorResponse('You can not delete primary bank. To delete this bank, please make any other bank as primary first');
             }
-        }else{
+        } else {
             return $this->errorResponse('Carhost Bank details are not found');
         }
     }
 
-    public function getHostVehicles(Request $request){
+    public function getHostVehicles(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'carhost_id' => 'required|exists:car_hosts,id',
             'vehicle_id' => 'nullable|exists:vehicles,vehicle_id',
@@ -871,14 +1085,14 @@ class CarHostManagementController extends Controller
         $carEligibility = CarEligibility::where('car_hosts_id', $request->carhost_id)->pluck('vehicle_id')->toArray();
         $vehicles = Vehicle::whereIn('vehicle_id', $carEligibility)->whereHas('pricingDetails')->with(['carhostFeatures', 'pricingDetails', 'vehicleEligibility', 'hostVehicleImages'])->where('is_deleted', 0);
         $interiorImgArr = $exteriorImgArr = [];
-        if(isset($request->vehicle_id) && $request->vehicle_id != ''){
+        if (isset($request->vehicle_id) && $request->vehicle_id != '') {
             $vehicles = $vehicles->where('vehicle_id', $request->vehicle_id)->first();
-            if(isset($vehicles->hostVehicleImages) && $vehicles->hostVehicleImages != ''){
-                foreach($vehicles->hostVehicleImages as $key => $val){
-                    if(isset($val->image_type)){
-                        if($val->image_type == 2){
+            if (isset($vehicles->hostVehicleImages) && $vehicles->hostVehicleImages != '') {
+                foreach ($vehicles->hostVehicleImages as $key => $val) {
+                    if (isset($val->image_type)) {
+                        if ($val->image_type == 2) {
                             $interiorImgArr[] = $val->vehicle_img;
-                        }elseif($val->image_type == 3){
+                        } elseif ($val->image_type == 3) {
                             $exteriorImgArr[] = $val->vehicle_img;
                         }
                     }
@@ -889,7 +1103,7 @@ class CarHostManagementController extends Controller
                 $carHostVehicleFeatureCheck = CarHostVehicleFeatureTemp::where('vehicles_id', $vehicles->vehicle_id)->exists();
                 $carHostVehicleImageTempCheck = CarHostVehicleImageTemp::where('vehicles_id', $vehicles->vehicle_id)->exists();
                 $approveIconStatus = false;
-                if($carHostVehicleFeatureCheck || $carHostVehicleImageTempCheck){
+                if ($carHostVehicleFeatureCheck || $carHostVehicleImageTempCheck) {
                     $approveIconStatus = true;
                 }
                 $vehicles->is_show_approve_icon = $approveIconStatus;
@@ -897,24 +1111,24 @@ class CarHostManagementController extends Controller
             }
 
             return $this->successResponse($vehicles, 'Carhost vehicles are get Successfully');
-        }else{
+        } else {
             $vehicles = $vehicles->get();
-            if(is_countable($vehicles) && count($vehicles) > 0){
-                foreach($vehicles as $key => $val){
+            if (is_countable($vehicles) && count($vehicles) > 0) {
+                foreach ($vehicles as $key => $val) {
                     $carHostVehicleFeatureCheck = CarHostVehicleFeatureTemp::where('vehicles_id', $val->vehicle_id)->exists();
                     $carHostVehicleImageTempCheck = CarHostVehicleImageTemp::where('vehicles_id', $val->vehicle_id)->exists();
                     $approveIconStatus = false;
-                    if($carHostVehicleFeatureCheck || $carHostVehicleImageTempCheck){
+                    if ($carHostVehicleFeatureCheck || $carHostVehicleImageTempCheck) {
                         $approveIconStatus = true;
                     }
                     $val->is_show_approve_icon = $approveIconStatus;
-                    
-                    if(isset($val->hostVehicleImages) && $val->hostVehicleImages != ''){
-                        foreach($val->hostVehicleImages as $key => $v){
-                            if(isset($v->image_type)){
-                                if($v->image_type == 2){
+
+                    if (isset($val->hostVehicleImages) && $val->hostVehicleImages != '') {
+                        foreach ($val->hostVehicleImages as $key => $v) {
+                            if (isset($v->image_type)) {
+                                if ($v->image_type == 2) {
                                     $interiorImgArr[] = $v->vehicle_img;
-                                }elseif($v->image_type == 3){
+                                } elseif ($v->image_type == 3) {
                                     $exteriorImgArr[] = $v->vehicle_img;
                                 }
                             }
@@ -925,13 +1139,14 @@ class CarHostManagementController extends Controller
                     }
                 }
                 return $this->successResponse(['vehicles' => $vehicles], 'Carhost vehicles are get Successfully');
-            }else{
+            } else {
                 return $this->errorResponse('Carhost vehicles are not Found');
             }
         }
     }
 
-    public function getHostUpdatedFeatures(Request $request){
+    public function getHostUpdatedFeatures(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -944,14 +1159,15 @@ class CarHostManagementController extends Controller
         $carHostVehicleFeature = CarHostVehicleFeature::where('vehicles_id', $request->vehicle_id)->with('feature:feature_id,name')->get();
         $data['old'] = $carHostVehicleFeature;
         $data['new'] = $carHostVehicleFeatureTemp;
-        if(isset($data) && is_countable($data) && count($data) > 0){
+        if (isset($data) && is_countable($data) && count($data) > 0) {
             return $this->successResponse($data, 'Carhost updated features details are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost updated features details are not found');
-        }   
+        }
     }
 
-    public function getHostUpdatedImages(Request $request){
+    public function getHostUpdatedImages(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -962,15 +1178,15 @@ class CarHostManagementController extends Controller
         $carHostVehicleImage = CarHostVehicleImage::where('vehicles_id', $request->vehicle_id)->orderBy('image_type', 'ASC')->get();
         $carHostVehicleImageTemp = CarHostVehicleImageTemp::where('vehicles_id', $request->vehicle_id)->orderBy('image_type', 'ASC')->get();
 
-        if(isset($carHostVehicleImage) && is_countable($carHostVehicleImage) && count($carHostVehicleImage) > 0){
-            foreach($carHostVehicleImage as $k => $v){
-                if(isset($v->image_type)){
+        if (isset($carHostVehicleImage) && is_countable($carHostVehicleImage) && count($carHostVehicleImage) > 0) {
+            foreach ($carHostVehicleImage as $k => $v) {
+                if (isset($v->image_type)) {
                     $imageTypeText = $v->image_type == 2 ? 'Interior' : 'Exterior';
                     $v->image_type_text = $imageTypeText;
                 }
             }
-            foreach($carHostVehicleImageTemp as $k => $v){
-                if(isset($v->image_type)){
+            foreach ($carHostVehicleImageTemp as $k => $v) {
+                if (isset($v->image_type)) {
                     $imageTypeText = $v->image_type == 2 ? 'Interior' : 'Exterior';
                     $v->image_type_text = $imageTypeText;
                 }
@@ -978,12 +1194,13 @@ class CarHostManagementController extends Controller
             $data['old'] = $carHostVehicleImage;
             $data['new'] = $carHostVehicleImageTemp;
             return $this->successResponse($data, 'Carhost updated images details are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost updated images details are not found');
-        }   
+        }
     }
 
-    public function getHostUpdatedLocation(Request $request){
+    public function getHostUpdatedLocation(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'host_pickup_location_id' => 'required|exists:car_host_pickup_locations,id',
         ]);
@@ -996,14 +1213,15 @@ class CarHostManagementController extends Controller
         $data['old'] = $carHostPickupLocation;
         $data['new'] = $carHostPickupLocationTemp;
 
-        if(isset($data) && is_countable($data) && count($data) > 0){
+        if (isset($data) && is_countable($data) && count($data) > 0) {
             return $this->successResponse($data, 'Carhost updated Pickup Location details are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost updated Pickup Location details are not found');
         }
     }
 
-    public function getHostUpdatedVehicleDetails(Request $request){
+    public function getHostUpdatedVehicleDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -1016,38 +1234,39 @@ class CarHostManagementController extends Controller
             ->join('cities as c', 'c.id', '=', 'v.temp_city_id')
             ->join('vehicle_models as vm', 'vm.model_id', '=', 'v.model_id')
             ->join('vehicle_manufacturers as vma', 'vma.manufacturer_id', '=', 'vm.manufacturer_id')
-            ->select('v.vehicle_id', 'v.temp_city_id', 'c.name', 'v.model_id', 'v.year','vm.name as vehicle_model_name', 'vma.name as manufacturer')->first();
+            ->select('v.vehicle_id', 'v.temp_city_id', 'c.name', 'v.model_id', 'v.year', 'vm.name as vehicle_model_name', 'vma.name as manufacturer')->first();
         $carHostNewVehicleDetail = DB::table('vehicles as v')
             ->where('vehicle_id', $request->vehicle_id)->where('is_host_updated', 1)
             ->join('cities as c', 'c.id', '=', 'v.updated_temp_city_id')
             ->join('vehicle_models as vmu', 'vmu.model_id', '=', 'v.updated_model_id')
             ->join('vehicle_manufacturers as vma', 'vma.manufacturer_id', '=', 'vmu.manufacturer_id')
-            ->select('v.vehicle_id', 'v.updated_temp_city_id', 'c.name', 'v.updated_model_id', 'v.updated_year','vmu.name as vehicle_updated_model_name','vma.name as manufacturer')->first();
-        if($carHostOldVehicleDetail == '' || $carHostNewVehicleDetail == ''){
+            ->select('v.vehicle_id', 'v.updated_temp_city_id', 'c.name', 'v.updated_model_id', 'v.updated_year', 'vmu.name as vehicle_updated_model_name', 'vma.name as manufacturer')->first();
+        if ($carHostOldVehicleDetail == '' || $carHostNewVehicleDetail == '') {
             return $this->errorResponse($data, 'Carhost vehicle details are not found');
-        }else{
-            $oldModelImg = $newModelImg ='';
+        } else {
+            $oldModelImg = $newModelImg = '';
             $oldModelDetail = VehicleModel::select('model_id', 'model_image')->where('model_id', $carHostOldVehicleDetail->model_id)->first();
             $newModelDetail = VehicleModel::select('model_id', 'model_image')->where('model_id', $carHostNewVehicleDetail->updated_model_id)->first();
             $oldModelImg = $oldModelDetail->model_image;
             $newModelImg = $newModelDetail->model_image;
-            
+
             $carHostOldVehicleDetail->model_img = $oldModelImg;
             $carHostNewVehicleDetail->model_img = $newModelImg;
 
             $data['old'] = $carHostOldVehicleDetail;
             $data['new'] = $carHostNewVehicleDetail;
-            
+
             return $this->successResponse($data, 'Carhost vehicle details are get successfully');
         }
     }
 
-    public function getHostUpdatedVehicleDocuments(Request $request){
+    public function getHostUpdatedVehicleDocuments(Request $request)
+    {
         $docType = config('global_values.vehicle_document_types');
         $docType = implode(',', $docType);
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
-            'document_type' => 'required|in:'.$docType, //It should be either 'rc_doc', 'insurance_doc' or 'puc_doc'
+            'document_type' => 'required|in:' . $docType, //It should be either 'rc_doc', 'insurance_doc' or 'puc_doc'
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
@@ -1055,16 +1274,16 @@ class CarHostManagementController extends Controller
         $data = [];
         $carHostOldVehicleDocument = VehicleDocument::select('document_id', 'vehicle_id', 'document_type', 'expiry_date', 'document_image_url', 'id_number')->where('vehicle_id', $request->vehicle_id)->where('document_type', $request->document_type)->get();
         $carHostNewVehicleDocument = VehicleDocumentTemp::select('document_id', 'vehicle_id', 'document_type', 'expiry_date', 'document_image_url', 'id_number')->where('vehicle_id', $request->vehicle_id)->where('document_type', $request->document_type)->get();
-        if(isset($carHostOldVehicleDocument) && is_countable($carHostOldVehicleDocument) && count($carHostOldVehicleDocument) > 0){
-            foreach($carHostOldVehicleDocument as $key => $val){
-                if($val->document_image_url){
+        if (isset($carHostOldVehicleDocument) && is_countable($carHostOldVehicleDocument) && count($carHostOldVehicleDocument) > 0) {
+            foreach ($carHostOldVehicleDocument as $key => $val) {
+                if ($val->document_image_url) {
                     $val->document_image_url = asset('images/documents/' . $val->document_image_url);
                 }
             }
         }
-        if(isset($carHostNewVehicleDocument) && is_countable($carHostNewVehicleDocument) && count($carHostNewVehicleDocument) > 0){
-            foreach($carHostNewVehicleDocument as $key => $val){
-                if($val->document_image_url){
+        if (isset($carHostNewVehicleDocument) && is_countable($carHostNewVehicleDocument) && count($carHostNewVehicleDocument) > 0) {
+            foreach ($carHostNewVehicleDocument as $key => $val) {
+                if ($val->document_image_url) {
                     $val->document_image_url = asset('images/documents/' . $val->document_image_url);
                 }
             }
@@ -1072,14 +1291,15 @@ class CarHostManagementController extends Controller
         $data['old'] = $carHostOldVehicleDocument;
         $data['new'] = $carHostNewVehicleDocument;
 
-        if(isset($data) && is_countable($data) && count($data) > 0){
+        if (isset($data) && is_countable($data) && count($data) > 0) {
             return $this->successResponse($data, 'Carhost updated Vehicle Document details are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost updated Vehicle Document details are not found');
         }
     }
 
-    public function getHostUpdatedVehiclePrices(Request $request){
+    public function getHostUpdatedVehiclePrices(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -1091,18 +1311,19 @@ class CarHostManagementController extends Controller
         $carHostNewVehiclePrice = VehiclePriceDetailTemp::where('vehicle_id', $request->vehicle_id)->get();
 
         $vehicle = Vehicle::select('vehicle_id', 'model_id', 'extra_km_rate', 'deposit_amount', 'updated_extra_km_rate', 'updated_deposit_amount', 'updated_is_deposit_amount_show')->where('vehicle_id', $request->vehicle_id)->first();
-        if($vehicle != ''){
+        if ($vehicle != '') {
             $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model', 'color', 'host_step_count', 'license_plate', 'rental_price', 'publish', 'vehicle_created_by', 'apply_for_publish', 'temp_city_id', 'step_cnt', 'is_host_updated', 'cutout_image', 'location', 'city_name', 'city_id', 'updated_model_id', 'updated_year', 'vehicle_name', 'category_name', 'model_id');
         }
-       
+
         $data['old'] = $carHostOldVehiclePrice;
         $data['new'] = $carHostNewVehiclePrice;
         $data['vehicle_detail'] = $vehicle;
-        
+
         return $this->successResponse($data, 'Carhost vehicle prices are get successfully');
     }
 
-    public function storeHostUpdatedFeatures(Request $request){
+    public function storeHostUpdatedFeatures(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             //'temp_feature_id' => 'required|exists:car_host_vehicle_feature_temps, id',
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
@@ -1112,9 +1333,9 @@ class CarHostManagementController extends Controller
         }
 
         $carHostVehicleFeatureTemp = CarHostVehicleFeatureTemp::where(['vehicles_id' => $request->vehicle_id])->get();
-        if(isset($carHostVehicleFeatureTemp) && is_countable($carHostVehicleFeatureTemp) && count($carHostVehicleFeatureTemp) > 0){
+        if (isset($carHostVehicleFeatureTemp) && is_countable($carHostVehicleFeatureTemp) && count($carHostVehicleFeatureTemp) > 0) {
             $getExistingFeatures = CarHostVehicleFeature::where('vehicles_id', $request->vehicle_id)->delete();
-            if(is_countable($carHostVehicleFeatureTemp) && count($carHostVehicleFeatureTemp) > 0){
+            if (is_countable($carHostVehicleFeatureTemp) && count($carHostVehicleFeatureTemp) > 0) {
                 foreach ($carHostVehicleFeatureTemp as $key => $value) {
                     $carHostVehicleFeature = new CarHostVehicleFeature();
                     $carHostVehicleFeature->vehicles_id = $value->vehicles_id;
@@ -1123,14 +1344,43 @@ class CarHostManagementController extends Controller
 
                     $value->delete();
                 }
+
+                // PUBLISH VEHICLE IMMEDIATELY
+                $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
+                if ($vehicle != '') {
+                    $vehicle->publish = 1;
+                    $vehicle->save();
+                }
+
                 return $this->successResponse(null, 'New features are Approved sucessfully');
             }
-        }else{
+        } else {
             return $this->errorResponse('New features are not found for this Vehicle');
         }
     }
 
-    public function storeHostUpdatedImages(Request $request){
+    public function rejectHostUpdatedFeatures(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'vehicle_id' => 'required|exists:vehicles,vehicle_id',
+        ]);
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $carHostVehicleFeatureTemp = CarHostVehicleFeatureTemp::where(['vehicles_id' => $request->vehicle_id])->get();
+        if (isset($carHostVehicleFeatureTemp) && is_countable($carHostVehicleFeatureTemp) && count($carHostVehicleFeatureTemp) > 0) {
+            foreach ($carHostVehicleFeatureTemp as $key => $value) {
+                $value->delete();
+            }
+            return $this->successResponse(null, 'New features are Rejected sucessfully');
+        } else {
+            return $this->errorResponse('New features are not found for this Vehicle');
+        }
+    }
+
+    public function storeHostUpdatedImages(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -1139,13 +1389,13 @@ class CarHostManagementController extends Controller
         }
         $hostInteriorVehicleImageTemp = CarHostVehicleImageTemp::where('vehicles_id', $request->vehicle_id)->where('image_type', 2)->get();
         $hostExteriorVehicleImageTemp = CarHostVehicleImageTemp::where('vehicles_id', $request->vehicle_id)->where('image_type', 3)->get();
-        if(isset($hostInteriorVehicleImageTemp) && is_countable($hostInteriorVehicleImageTemp) && count($hostInteriorVehicleImageTemp) > 0){
-            $carHostVehicleImage = CarHostVehicleImage::where('vehicles_id', $request->vehicle_id)->where('image_type', 2)->get();  
-            if(isset($carHostVehicleImage) && is_countable($carHostVehicleImage) && count($carHostVehicleImage) > 0){
-                foreach($carHostVehicleImage as $k => $v){
+        if (isset($hostInteriorVehicleImageTemp) && is_countable($hostInteriorVehicleImageTemp) && count($hostInteriorVehicleImageTemp) > 0) {
+            $carHostVehicleImage = CarHostVehicleImage::where('vehicles_id', $request->vehicle_id)->where('image_type', 2)->get();
+            if (isset($carHostVehicleImage) && is_countable($carHostVehicleImage) && count($carHostVehicleImage) > 0) {
+                foreach ($carHostVehicleImage as $k => $v) {
                     $this->unlinkImages($v);
                 }
-                foreach($hostInteriorVehicleImageTemp as $k => $v){
+                foreach ($hostInteriorVehicleImageTemp as $k => $v) {
                     $carHostVehicleImage = new CarHostVehicleImage();
                     $carHostVehicleImage->vehicles_id = $v->vehicles_id;
                     $carHostVehicleImage->image_type = $v->image_type;
@@ -1155,13 +1405,13 @@ class CarHostManagementController extends Controller
                 }
             }
         }
-        if(isset($hostExteriorVehicleImageTemp) && is_countable($hostExteriorVehicleImageTemp) && count($hostExteriorVehicleImageTemp) > 0){
-            $carHostVehicleImage = CarHostVehicleImage::where('vehicles_id', $request->vehicle_id)->where('image_type', 3)->get();  
-            if(isset($carHostVehicleImage) && is_countable($carHostVehicleImage) && count($carHostVehicleImage) > 0){
-                foreach($carHostVehicleImage as $k => $v){
+        if (isset($hostExteriorVehicleImageTemp) && is_countable($hostExteriorVehicleImageTemp) && count($hostExteriorVehicleImageTemp) > 0) {
+            $carHostVehicleImage = CarHostVehicleImage::where('vehicles_id', $request->vehicle_id)->where('image_type', 3)->get();
+            if (isset($carHostVehicleImage) && is_countable($carHostVehicleImage) && count($carHostVehicleImage) > 0) {
+                foreach ($carHostVehicleImage as $k => $v) {
                     $this->unlinkImages($v);
                 }
-                foreach($hostExteriorVehicleImageTemp as $k => $v){
+                foreach ($hostExteriorVehicleImageTemp as $k => $v) {
                     $carHostVehicleImage = new CarHostVehicleImage();
                     $carHostVehicleImage->vehicles_id = $v->vehicles_id;
                     $carHostVehicleImage->image_type = $v->image_type;
@@ -1171,11 +1421,40 @@ class CarHostManagementController extends Controller
                 }
             }
         }
-        
+
+        // PUBLISH VEHICLE IMMEDIATELY
+        $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
+        if ($vehicle != '') {
+            $vehicle->publish = 1;
+            $vehicle->save();
+        }
+
         return $this->successResponse(null, 'Carhost updated images details are set successfully');
     }
 
-    public function storeHostUpdatedLocation(Request $request){
+    public function rejectHostUpdatedImages(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'vehicle_id' => 'required|exists:vehicles,vehicle_id',
+        ]);
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $hostVehicleImageTemp = CarHostVehicleImageTemp::where('vehicles_id', $request->vehicle_id)->get();
+        if (isset($hostVehicleImageTemp) && is_countable($hostVehicleImageTemp) && count($hostVehicleImageTemp) > 0) {
+            foreach ($hostVehicleImageTemp as $k => $v) {
+                $this->unlinkImages($v);
+            }
+            return $this->successResponse(null, 'New images are Rejected sucessfully');
+        } else {
+            return $this->errorResponse('New images are not found for this Vehicle');
+        }
+    }
+
+
+    public function storeHostUpdatedLocation(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'host_pickup_location_id' => 'required|exists:car_host_pickup_locations,id',
         ]);
@@ -1184,24 +1463,24 @@ class CarHostManagementController extends Controller
         }
 
         $carHostPickupLocationTemp = CarHostPickupLocationTemp::where('car_host_pickup_locations_id', $request->host_pickup_location_id)->with('carHostParkingVehicleImgs')->first();
-        if(isset($carHostPickupLocationTemp) && $carHostPickupLocationTemp != ''){
+        if (isset($carHostPickupLocationTemp) && $carHostPickupLocationTemp != '') {
             $carHostPickupLocation = CarHostPickupLocation::where('id', $request->host_pickup_location_id)->with('carHostParkingVehicleImgs')->first();
-            if(isset($carHostPickupLocation) && $carHostPickupLocation != ''){
+            if (isset($carHostPickupLocation) && $carHostPickupLocation != '') {
                 $carHostPickupLocation->city_id = $carHostPickupLocationTemp->city_id;
                 $carHostPickupLocation->name = $carHostPickupLocationTemp->name;
                 $carHostPickupLocation->latitude = $carHostPickupLocationTemp->latitude;
-                $carHostPickupLocation->longitude = $carHostPickupLocationTemp->longitude; 
+                $carHostPickupLocation->longitude = $carHostPickupLocationTemp->longitude;
                 $carHostPickupLocation->location = $carHostPickupLocationTemp->location;
                 $carHostPickupLocation->parking_type_id = $carHostPickupLocationTemp->parking_type_id;
                 $carHostPickupLocation->is_primary = $carHostPickupLocationTemp->is_primary;
                 $carHostPickupLocation->save();
-                if(isset($carHostPickupLocation->carHostParkingVehicleImgs) && count($carHostPickupLocation->carHostParkingVehicleImgs) > 0){
-                    foreach($carHostPickupLocation->carHostParkingVehicleImgs as $k => $v){
+                if (isset($carHostPickupLocation->carHostParkingVehicleImgs) && count($carHostPickupLocation->carHostParkingVehicleImgs) > 0) {
+                    foreach ($carHostPickupLocation->carHostParkingVehicleImgs as $k => $v) {
                         $this->unlinkImages($v);
                     }
                 }
-                if(isset($carHostPickupLocationTemp->carHostParkingVehicleImgs) && count($carHostPickupLocationTemp->carHostParkingVehicleImgs) > 0){
-                    foreach($carHostPickupLocationTemp->carHostParkingVehicleImgs as $k => $v){
+                if (isset($carHostPickupLocationTemp->carHostParkingVehicleImgs) && count($carHostPickupLocationTemp->carHostParkingVehicleImgs) > 0) {
+                    foreach ($carHostPickupLocationTemp->carHostParkingVehicleImgs as $k => $v) {
                         $carHostVehicleImageTemp = new CarHostVehicleImage();
                         $carHostVehicleImageTemp->car_host_pickup_locations_id = $v->car_host_pickup_locations_id;
                         $carHostVehicleImageTemp->image_type = $v->image_type;
@@ -1212,13 +1491,27 @@ class CarHostManagementController extends Controller
                 }
                 $carHostPickupLocationTemp->delete();
             }
+
+            // PUBLISH ALL VEHICLES USING THIS LOCATION IMMEDIATELY
+            $vehicles = Vehicle::whereHas('vehicleEligibility', function ($q) use ($request) {
+                $q->where('car_host_pickup_location_id', $request->host_pickup_location_id);
+            })->get();
+            if ($vehicles->isNotEmpty()) {
+                foreach ($vehicles as $v) {
+                    $v->publish = 1;
+                    $v->save();
+                }
+            }
+
             return $this->successResponse($carHostPickupLocation, 'Carhost updated Location details are stored successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost updated pickup location details are not found');
         }
     }
 
-    public function storeHostUpdatedVehicleDetails(Request $request){
+
+    public function storeHostUpdatedVehicleDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -1227,55 +1520,81 @@ class CarHostManagementController extends Controller
         }
 
         $vehicle = Vehicle::where(['vehicle_id' => $request->vehicle_id])->first();
-        if(isset($vehicle) && $vehicle != ''){
+        if (isset($vehicle) && $vehicle != '') {
             $vehicle->temp_city_id = $vehicle->updated_temp_city_id;
             $vehicle->model_id = $vehicle->updated_model_id;
             $vehicle->year = $vehicle->updated_year;
-            $vehicle->is_host_updated = 0; 
-            $vehicle->updated_temp_city_id = NULL; 
-            $vehicle->updated_model_id = NULL; 
-            $vehicle->updated_year = NULL; 
+            $vehicle->is_host_updated = 0;
+            $vehicle->updated_temp_city_id = NULL;
+            $vehicle->updated_model_id = NULL;
+            $vehicle->updated_year = NULL;
+            $vehicle->publish = 1;
             $vehicle->save();
 
             // UPDATED CITIES IN CAR HOST PICKUP LOCATIONS AS PER VEHICLE CITY
             $getCarEligibility = CarEligibility::where('vehicle_id', $request->vehicle_id)->first();
-            if($getCarEligibility != ''){
+            if ($getCarEligibility != '') {
                 $carHostPickupLocations = CarHostPickupLocation::where('id', $getCarEligibility->car_host_pickup_location_id)->first();
-                if(isset($carHostPickupLocations) && $carHostPickupLocations != ''){
+                if (isset($carHostPickupLocations) && $carHostPickupLocations != '') {
                     $carHostPickupLocations->city_id = $vehicle->temp_city_id;
-                    $carHostPickupLocations->save(); 
+                    $carHostPickupLocations->save();
                 }
             }
 
             return $this->successResponse(null, 'New Vehicle details are Approved sucessfully');
-        }else{
+        } else {
             return $this->errorResponse('New Vehicles details are not found for this Vehicle');
         }
     }
 
-    public function storeHostUpdatedVehicleDocuments(Request $request){
+    public function rejectHostUpdatedVehicleDetails(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'vehicle_id' => 'required|exists:vehicles,vehicle_id',
+        ]);
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $vehicle = Vehicle::where(['vehicle_id' => $request->vehicle_id])->first();
+        if (isset($vehicle) && $vehicle->is_host_updated == 1) {
+            $vehicle->is_host_updated = 0;
+            $vehicle->updated_temp_city_id = NULL;
+            $vehicle->updated_model_id = NULL;
+            $vehicle->updated_year = NULL;
+            $vehicle->save();
+
+            return $this->successResponse(null, 'New Vehicle details are Rejected sucessfully');
+        } else {
+            return $this->errorResponse('New Vehicles details are not found for this Vehicle');
+        }
+    }
+
+
+    public function storeHostUpdatedVehicleDocuments(Request $request)
+    {
         $docType = config('global_values.vehicle_document_types');
         $docType = implode(',', $docType);
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
-            'document_type' => 'required|in:'.$docType, //It should be either 'rc_doc', 'insurance_doc' or 'puc_doc'
+            'document_type' => 'required|in:' . $docType, //It should be either 'rc_doc', 'insurance_doc' or 'puc_doc'
         ]);
 
         $vehicleDocumentTemp = VehicleDocumentTemp::where(['vehicle_id' => $request->vehicle_id])->where('document_type', $request->document_type)->get();
-        if(isset($vehicleDocumentTemp) && is_countable($vehicleDocumentTemp) && count($vehicleDocumentTemp) > 0){
+        if (isset($vehicleDocumentTemp) && is_countable($vehicleDocumentTemp) && count($vehicleDocumentTemp) > 0) {
             $getExistingDocuments = VehicleDocument::where('vehicle_id', $request->vehicle_id)->where('document_type', $request->document_type)->get();
-            if(is_countable($getExistingDocuments) && count($getExistingDocuments) > 0){
-                foreach($getExistingDocuments as $k => $v){
-                    if(isset($v->document_image_url)){
-                        $filePath = public_path().'/images/documents/'.basename($v->document_image_url);
-                        if(file_exists($filePath)){
+            if (is_countable($getExistingDocuments) && count($getExistingDocuments) > 0) {
+                foreach ($getExistingDocuments as $k => $v) {
+                    if (isset($v->document_image_url)) {
+                        $filePath = public_path() . '/images/documents/' . basename($v->document_image_url);
+                        if (file_exists($filePath)) {
                             unlink($filePath);
                         }
                     }
                 }
                 $getExistingDocuments->each->delete();
             }
-            if(is_countable($vehicleDocumentTemp) && count($vehicleDocumentTemp)){
+            if (is_countable($vehicleDocumentTemp) && count($vehicleDocumentTemp)) {
                 $rcNum = '';
                 foreach ($vehicleDocumentTemp as $key => $value) {
                     $rcNum = $value->id_number;
@@ -1290,21 +1609,60 @@ class CarHostManagementController extends Controller
                     $vehicleDocument->save();
                     $value->delete();
                 }
-                if($rcNum != ''){
+                if ($rcNum != '') {
                     $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
-                    if($vehicle != ''){
+                    if ($vehicle != '') {
                         $vehicle->license_plate = $rcNum;
+                        $vehicle->publish = 1;
+                        $vehicle->save();
+                    }
+                } else {
+                    // PUBLISH VEHICLE IMMEDIATELY
+                    $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
+                    if ($vehicle != '') {
+                        $vehicle->publish = 1;
                         $vehicle->save();
                     }
                 }
                 return $this->successResponse(null, 'New vehicle documents are Approved sucessfully');
             }
-        }else{
+        } else {
             return $this->errorResponse('New vehicle documents are not found for this Vehicle');
         }
     }
 
-    public function storeHostUpdatedVehiclePrices(Request $request){
+    public function rejectHostUpdatedVehicleDocuments(Request $request)
+    {
+        $docType = config('global_values.vehicle_document_types');
+        $docType = implode(',', $docType);
+        $validator = Validator::make($request->all(), [
+            'vehicle_id' => 'required|exists:vehicles,vehicle_id',
+            'document_type' => 'required|in:' . $docType, //It should be either 'rc_doc', 'insurance_doc' or 'puc_doc'
+        ]);
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $vehicleDocumentTemp = VehicleDocumentTemp::where(['vehicle_id' => $request->vehicle_id])->where('document_type', $request->document_type)->get();
+        if (isset($vehicleDocumentTemp) && is_countable($vehicleDocumentTemp) && count($vehicleDocumentTemp) > 0) {
+            foreach ($vehicleDocumentTemp as $k => $v) {
+                if (isset($v->document_image_url)) {
+                    $filePath = public_path() . '/images/documents/' . basename($v->document_image_url);
+                    if (file_exists($filePath)) {
+                        unlink($filePath);
+                    }
+                }
+                $v->delete();
+            }
+            return $this->successResponse(null, 'New vehicle documents are Rejected sucessfully');
+        } else {
+            return $this->errorResponse('New vehicle documents are not found for this Vehicle');
+        }
+    }
+
+
+    public function storeHostUpdatedVehiclePrices(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -1313,12 +1671,12 @@ class CarHostManagementController extends Controller
         }
 
         $vehiclePriceDetailTemp = VehiclePriceDetailTemp::where(['vehicle_id' => $request->vehicle_id])->get();
-        if(isset($vehiclePriceDetailTemp) && is_countable($vehiclePriceDetailTemp) && count($vehiclePriceDetailTemp) > 0){
+        if (isset($vehiclePriceDetailTemp) && is_countable($vehiclePriceDetailTemp) && count($vehiclePriceDetailTemp) > 0) {
             $getExistingPrices = VehiclePriceDetail::where('vehicle_id', $request->vehicle_id)->get();
-            if(is_countable($getExistingPrices) && count($getExistingPrices) > 0){
+            if (is_countable($getExistingPrices) && count($getExistingPrices) > 0) {
                 $getExistingPrices->each->delete();
             }
-            if(is_countable($vehiclePriceDetailTemp) && count($vehiclePriceDetailTemp)){
+            if (is_countable($vehiclePriceDetailTemp) && count($vehiclePriceDetailTemp)) {
                 foreach ($vehiclePriceDetailTemp as $key => $value) {
                     $vehiclePriceDetail = new VehiclePriceDetail();
                     $vehiclePriceDetail->vehicle_id = $value->vehicle_id;
@@ -1335,33 +1693,70 @@ class CarHostManagementController extends Controller
                     $value->delete();
                 }
                 $checkVehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
-                if($checkVehicle != '' && $checkVehicle->updated_extra_km_rate != NULL || $checkVehicle->updated_extra_km_rate != ''){
+                if ($checkVehicle != '' && $checkVehicle->updated_extra_km_rate != NULL || $checkVehicle->updated_extra_km_rate != '') {
                     $checkVehicle->deposit_amount = $checkVehicle->updated_deposit_amount;
                     $checkVehicle->is_deposit_amount_show = $checkVehicle->updated_is_deposit_amount_show;
-                    if($checkVehicle->updated_extra_km_rate != NULL || $checkVehicle->updated_extra_km_rate != ''){
+                    if ($checkVehicle->updated_extra_km_rate != NULL || $checkVehicle->updated_extra_km_rate != '') {
                         $checkVehicle->extra_km_rate = $checkVehicle->updated_extra_km_rate;
                     }
                     $checkVehicle->updated_deposit_amount = NULL;
                     $checkVehicle->updated_is_deposit_amount_show = NULL;
                     $checkVehicle->updated_extra_km_rate = NULL;
+                    $checkVehicle->publish = 1;
                     $checkVehicle->save();
+                } else {
+                    $checkVehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
+                    if ($checkVehicle != '') {
+                        $checkVehicle->publish = 1;
+                        $checkVehicle->save();
+                    }
                 }
                 return $this->successResponse(null, 'New vehicle prices are Approved sucessfully');
             }
-        }else{
+        } else {
             return $this->errorResponse('New vehicle prices are not found for this Vehicle');
         }
     }
 
-    protected function unlinkImages($carHostVehicleImage){
-        $filePath = public_path().'/images/car_host/'.basename($carHostVehicleImage->vehicle_img);
-        if(file_exists($filePath)){
+    public function rejectHostUpdatedVehiclePrices(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'vehicle_id' => 'required|exists:vehicles,vehicle_id',
+        ]);
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $vehiclePriceDetailTemp = VehiclePriceDetailTemp::where(['vehicle_id' => $request->vehicle_id])->get();
+        if (isset($vehiclePriceDetailTemp) && is_countable($vehiclePriceDetailTemp) && count($vehiclePriceDetailTemp) > 0) {
+            foreach ($vehiclePriceDetailTemp as $key => $value) {
+                $value->delete();
+            }
+            $checkVehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
+            if ($checkVehicle != '') {
+                $checkVehicle->updated_deposit_amount = NULL;
+                $checkVehicle->updated_is_deposit_amount_show = NULL;
+                $checkVehicle->updated_extra_km_rate = NULL;
+                $checkVehicle->save();
+            }
+            return $this->successResponse(null, 'New vehicle prices are Rejected sucessfully');
+        } else {
+            return $this->errorResponse('New vehicle prices are not found for this Vehicle');
+        }
+    }
+
+
+    protected function unlinkImages($carHostVehicleImage)
+    {
+        $filePath = public_path() . '/images/car_host/' . basename($carHostVehicleImage->vehicle_img);
+        if (file_exists($filePath)) {
             unlink($filePath);
         }
         $carHostVehicleImage->delete();
     }
 
-    public function setHostFeatures(Request $request){
+    public function setHostFeatures(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'feature_id' => 'required',
@@ -1371,10 +1766,10 @@ class CarHostManagementController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        if(isset($request->feature_id) && $request->feature_id != ''){
+        if (isset($request->feature_id) && $request->feature_id != '') {
             $featureArr = explode(',', $request->feature_id);
             $carHostVehicleFeature = CarHostVehicleFeature::where('vehicles_id', $request->vehicle_id)->delete();
-            if(is_countable($featureArr) && count($featureArr) > 0){
+            if (is_countable($featureArr) && count($featureArr) > 0) {
                 foreach ($featureArr as $key => $value) {
                     $carHostVehicleFeature = new CarHostVehicleFeature();
                     $carHostVehicleFeature->vehicles_id = $request->vehicle_id;
@@ -1383,20 +1778,22 @@ class CarHostManagementController extends Controller
                 }
             }
         }
-        if(isset($request->vehicle_description) && $request->vehicle_description != ''){
+        if (isset($request->vehicle_description) && $request->vehicle_description != '') {
             $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
             $vehicle->description = $request->vehicle_description;
-            $vehicle->save();    
+            $vehicle->save();
         }
 
         return $this->successResponse(null, 'Host features updated successfully');
     }
 
-    public function setHostVehicleImages(Request $request){
+    public function setHostVehicleImages(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'vehicle_interior_imgs' => 'required|array',
-            'vehicle_interior_imgs.*' => ['max:80000',
+            'vehicle_interior_imgs.*' => [
+                'max:80000',
                 function ($attribute, $value, $fail) {
                     if ($value instanceof \Illuminate\Http\UploadedFile) {
                         if (!$value->isValid()) {
@@ -1416,7 +1813,8 @@ class CarHostManagementController extends Controller
                 }
             ],
             'vehicle_exterior_imgs' => 'required|array',
-            'vehicle_exterior_imgs.*' => ['max:80000',
+            'vehicle_exterior_imgs.*' => [
+                'max:80000',
                 function ($attribute, $value, $fail) {
                     if ($value instanceof \Illuminate\Http\UploadedFile) {
                         if (!$value->isValid()) {
@@ -1435,7 +1833,7 @@ class CarHostManagementController extends Controller
                     }
                 }
             ],
-        ],[
+        ], [
             'vehicle_interior_imgs.*.max' => 'Vehicle image size must be less than 80MB',
             'vehicle_exterior_imgs.*.max' => 'Vehicle image size must be less than 80MB',
         ]);
@@ -1445,16 +1843,16 @@ class CarHostManagementController extends Controller
 
         $interiorImgCnt = CarHostVehicleImage::where(['vehicles_id' => $request->vehicle_id, 'image_type' => 2])->count(); //image_type = 2 means Vehicle Interior images
         $exteriorImgCnt = CarHostVehicleImage::where(['vehicles_id' => $request->vehicle_id, 'image_type' => 3])->count(); //image_type = 3 means Vehicle Exterior images
-        if($interiorImgCnt > 5){
+        if ($interiorImgCnt > 5) {
             return $this->errorResponse('You can not add more than 5 images for Internal');
         }
-        if($exteriorImgCnt > 5){
+        if ($exteriorImgCnt > 5) {
             return $this->errorResponse('You can not add more than 5 images for External');
         }
-        
-        if(is_countable($request->file('vehicle_interior_imgs')) && count($request->file('vehicle_interior_imgs')) > 0){
+
+        if (is_countable($request->file('vehicle_interior_imgs')) && count($request->file('vehicle_interior_imgs')) > 0) {
             foreach ($request->file('vehicle_interior_imgs') as $key => $image) {
-                $filename = 'Interior_'.$request->vehicle_id.'_'.$key.'_'.time() . '.' . $image->getClientOriginalExtension();
+                $filename = 'Interior_' . $request->vehicle_id . '_' . $key . '_' . time() . '.' . $image->getClientOriginalExtension();
                 $image->move(public_path('images/car_host'), $filename);
                 $carHostVehicleImage = new CarHostVehicleImage();
                 $carHostVehicleImage->vehicles_id = $request->vehicle_id;
@@ -1463,10 +1861,10 @@ class CarHostManagementController extends Controller
                 $carHostVehicleImage->save();
             }
         }
-        
-        if(is_countable($request->file('vehicle_exterior_imgs')) && count($request->file('vehicle_exterior_imgs')) > 0){ 
+
+        if (is_countable($request->file('vehicle_exterior_imgs')) && count($request->file('vehicle_exterior_imgs')) > 0) {
             foreach ($request->file('vehicle_exterior_imgs') as $key => $image) {
-                $filename = 'Exterior_'.$request->vehicle_id.'_'.$key.'_'.time() . '.' . $image->getClientOriginalExtension();   
+                $filename = 'Exterior_' . $request->vehicle_id . '_' . $key . '_' . time() . '.' . $image->getClientOriginalExtension();
                 $image->move(public_path('images/car_host'), $filename);
                 $carHostVehicleImage = new CarHostVehicleImage();
                 $carHostVehicleImage->vehicles_id = $request->vehicle_id;
@@ -1478,7 +1876,8 @@ class CarHostManagementController extends Controller
         return $this->successResponse(null, 'Host vehicle images updated successfully');
     }
 
-    public function setHostVehicleDetails(Request $request){
+    public function setHostVehicleDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'fast_tag' => 'required|in:0,1', //0 = Fasttag not Exist, 1 = Fasttag Exist
@@ -1489,7 +1888,7 @@ class CarHostManagementController extends Controller
         }
 
         $carEligibility = CarEligibility::where('vehicle_id', $request->vehicle_id)->first();
-        if($carEligibility != ''){
+        if ($carEligibility != '') {
             $carEligibility->fast_tag = $request->fast_tag;
             $carEligibility->night_time = $request->night_time;
             $carEligibility->save();
@@ -1498,7 +1897,8 @@ class CarHostManagementController extends Controller
         return $this->successResponse($carEligibility, 'Vehicle Night time information stored successfully');
     }
 
-    public function getHostHoldVehicleDates(Request $request){
+    public function getHostHoldVehicleDates(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
         ]);
@@ -1506,24 +1906,25 @@ class CarHostManagementController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
-        if($vehicle != ''){
-            if($vehicle->availability_calendar != ''){
+        if ($vehicle != '') {
+            if ($vehicle->availability_calendar != '') {
                 $holding_dates = json_decode($vehicle->availability_calendar, true);
                 return $this->successResponse($holding_dates, 'Vehicle holding dates are fetched successfully');
-            }else{
+            } else {
                 return $this->errorResponse('No holding dates found for this vehicle');
             }
-        }else{
+        } else {
             return $this->errorResponse('5Vehicle not found');
         }
     }
 
-    public function setHostVehicleHoldDates(Request $request){
+    public function setHostVehicleHoldDates(Request $request)
+    {
         // Check if the car_eligibilities table is empty
         if (CarEligibility::count() === 0) {
             return $this->successResponse('No car eligibilities found.');
         }
-       
+
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'start_date' => 'required|date',
@@ -1536,42 +1937,43 @@ class CarHostManagementController extends Controller
         $data['end_date'] = $request->end_date;
         $data['reason'] = '';
         $requestStart = Carbon::createFromFormat('d-m-Y H:i A', $request->start_date);
-        $requestEnd   = Carbon::createFromFormat('d-m-Y H:i A', $request->end_date);
+        $requestEnd = Carbon::createFromFormat('d-m-Y H:i A', $request->end_date);
         $data = json_encode($data);
         $holdingDates = json_decode($data);
         $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
-        if($vehicle != ''){
-            if($vehicle->availability_calendar != ''){
+        if ($vehicle != '') {
+            if ($vehicle->availability_calendar != '') {
                 $dateValidated = true;
                 $existingDates = json_decode($vehicle->availability_calendar, true);
-                if(isset($existingDates) && is_countable($existingDates) && count($existingDates) > 0){
-                    foreach($existingDates as $key => $val){
+                if (isset($existingDates) && is_countable($existingDates) && count($existingDates) > 0) {
+                    foreach ($existingDates as $key => $val) {
                         $startDate = Carbon::createFromFormat('d-m-Y H:i A', $val['start_date']);
                         $endDate = Carbon::createFromFormat('d-m-Y H:i A', $val['end_date']);
-                        $overlaps = $requestStart->between($startDate, $endDate) || 
-                                    $requestEnd->between($startDate, $endDate) || 
-                                    ($requestStart > $startDate && $requestStart < $endDate) ||
-                                    ($requestEnd > $startDate && $requestEnd < $endDate);
+                        $overlaps = $requestStart->between($startDate, $endDate) ||
+                            $requestEnd->between($startDate, $endDate) ||
+                            ($requestStart > $startDate && $requestStart < $endDate) ||
+                            ($requestEnd > $startDate && $requestEnd < $endDate);
                         if ($overlaps) {
                             return $this->errorResponse('Date Range already exist');
                         }
                     }
                 }
-                if(is_array($existingDates)){
+                if (is_array($existingDates)) {
                     $holding_dates = array_merge($existingDates, [$holdingDates]);
-                }else{
+                } else {
                     $holding_dates = [$holdingDates];
                 }
-            }else{  
+            } else {
                 $holding_dates = [$holdingDates];
             }
             $vehicle->availability_calendar = json_encode($holding_dates);
             $vehicle->save();
         }
-        return $this->successResponse($vehicle, 'Vehicle holding dates are stored successfully'); 
+        return $this->successResponse($vehicle, 'Vehicle holding dates are stored successfully');
     }
 
-    public function deleteHoldVehicleDate(Request $request){
+    public function deleteHoldVehicleDate(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'start_date' => 'required|date',
@@ -1581,26 +1983,27 @@ class CarHostManagementController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
-        if($vehicle != ''){
-            if($vehicle->availability_calendar != ''){
+        if ($vehicle != '') {
+            if ($vehicle->availability_calendar != '') {
                 $holding_dates = json_decode($vehicle->availability_calendar, true);
                 foreach ($holding_dates as $key => $value) {
-                    if(isset($value['start_date']) && $value['start_date'] == $request->start_date && isset($value['end_date']) && $value['end_date'] == $request->end_date){
+                    if (isset($value['start_date']) && $value['start_date'] == $request->start_date && isset($value['end_date']) && $value['end_date'] == $request->end_date) {
                         unset($holding_dates[$key]);
                     }
                 }
                 $vehicle->availability_calendar = json_encode(array_values($holding_dates));
                 $vehicle->save();
                 return $this->successResponse(json_decode($vehicle->availability_calendar), 'Vehicle holding date is deleted successfully');
-            }else{
+            } else {
                 return $this->errorResponse('No holding dates found for this vehicle');
             }
-        }else{
+        } else {
             return $this->errorResponse('Vehicle not found');
         }
     }
 
-    public function getVehicleInfo(Request $request){
+    public function getVehicleInfo(Request $request)
+    {
         $detailArr = [];
         $startYear = 2010;
         $currentYear = date('Y');
@@ -1618,7 +2021,8 @@ class CarHostManagementController extends Controller
         return $this->successResponse($detailArr, 'Vehicle Information get Successfully');
     }
 
-    public function getHostVehiclePricingDetails(Request $request){
+    public function getHostVehiclePricingDetails(Request $request)
+    {
         $minPrice = 100;
         $maxPrice = 200;
 
@@ -1633,32 +2037,32 @@ class CarHostManagementController extends Controller
         if (!$vehicle) {
             return $this->errorResponse('Vehicle not found');
         }
-     
+
         $vehiclePriceDetails = VehiclePriceDetail::where('vehicle_id', $request->vehicle_id)->where('is_show', 1)->get();
-        if(is_countable($vehiclePriceDetails) && count($vehiclePriceDetails)) {
-            foreach($vehiclePriceDetails as $k => $v){
+        if (is_countable($vehiclePriceDetails) && count($vehiclePriceDetails)) {
+            foreach ($vehiclePriceDetails as $k => $v) {
                 //if($v->rate > 0){
-                    $tripAmount = $v->rate;
-                    $unKMtripAmount = $v->rate * 1.3;
-                    $perHourRate = $tripAmount / $v->hours; // Calculate per hour rate based on the total trip amount and duration
-                    $duration = ($v->hours >= 24) ? round($v->hours / 24, 2) . ' days' : $v->hours . ' hours';
-                    $vehicleTypeName = $vehicle->model->category->vehicleType->name ?? null;
-                    $durationHoursLimit = calculateKmLimit($v->hours, $vehicleTypeName);
-                    $pricingShowCase[$k]['duration'] = $duration;
-                    $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." Km )";
-                    // $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2);
-                    $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);
-                    $pricingShowCase[$k]['per_hour_rate'] = '₹' . number_format(($perHourRate), 2);
+                $tripAmount = $v->rate;
+                $unKMtripAmount = $v->rate * 1.3;
+                $perHourRate = $tripAmount / $v->hours; // Calculate per hour rate based on the total trip amount and duration
+                $duration = ($v->hours >= 24) ? round($v->hours / 24, 2) . ' days' : $v->hours . ' hours';
+                $vehicleTypeName = $vehicle->model->category->vehicleType->name ?? null;
+                $durationHoursLimit = calculateKmLimit($v->hours, $vehicleTypeName);
+                $pricingShowCase[$k]['duration'] = $duration;
+                $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2) . " ( " . $durationHoursLimit . " Km )";
+                // $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2);
+                $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);
+                $pricingShowCase[$k]['per_hour_rate'] = '₹' . number_format(($perHourRate), 2);
                 //}
             }
             //$summaryTable = $this->buildPricingTable($pricingShowCase);  
-            $summary = $pricingShowCase;  
+            $summary = $pricingShowCase;
 
             return $this->successResponse(['price_details' => $summary, 'min_price' => $minPrice, 'max_price' => $maxPrice], 'Pricing show case retrieved successfully.');
         } else {
             $rules = TripAmountCalculationRule::select('id', 'hours', 'multiplier')->orderBy('hours', 'desc')->get();
             $summaryTable = [];
-            if(is_countable($rules) && count($rules) > 0){
+            if (is_countable($rules) && count($rules) > 0) {
                 $pricingShowCase = $rules->map(function ($rule) use ($vehicle) {
                     $tripAmount = $rule->multiplier * $vehicle->rental_price;
                     $unKMtripAmount = ($rule->multiplier * $vehicle->rental_price) * 1.3;
@@ -1668,7 +2072,7 @@ class CarHostManagementController extends Controller
                     $durationHoursLimit = calculateKmLimit($rule->hours, $vehicleTypeName);
                     return [
                         'duration' => $duration,
-                        'trip_amount_in_rupees' => '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." Km )" ,
+                        'trip_amount_in_rupees' => '₹' . number_format(($tripAmount), 2) . " ( " . $durationHoursLimit . " Km )",
                         // 'trip_amount_in_rupees' => '₹' . number_format(($tripAmount), 2),
                         'unlimited_km_trip_amount_in_rupees' => '₹' . number_format(($unKMtripAmount), 2),
                         'per_hour_rate' => '₹' . number_format(($perHourRate), 2)
@@ -1682,7 +2086,8 @@ class CarHostManagementController extends Controller
         return $this->successResponse(['table_html' => $summaryTable, 'min_price' => $minPrice, 'max_price' => $maxPrice], 'Pricing show case retrieved successfully.');
     }
 
-    public function setHostVehiclePricingDetails(Request $request){
+    public function setHostVehiclePricingDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'pricing_update_info' => 'required|json',
@@ -1690,41 +2095,40 @@ class CarHostManagementController extends Controller
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
-        if($request->vehicle_id != ''){
+        if ($request->vehicle_id != '') {
             $vehicle = Vehicle::where('vehicle_id', $request->vehicle_id)->first();
-            if($vehicle != ''){
+            if ($vehicle != '') {
                 $rentalPrice = $rentalPriceHour = 0;
                 $vehicleModelId = $vehicle->model_id ?? '';
-                if($request->pricing_update_info != ''){
+                if ($request->pricing_update_info != '') {
                     $pricingDetails = json_decode($request->pricing_update_info, true);
-                    if(is_countable($pricingDetails) && count($pricingDetails) > 0){
+                    if (is_countable($pricingDetails) && count($pricingDetails) > 0) {
                         $priceDetailArr = $updatedDetails = [];
                         $messageList = '';
                         $updateStatus = true;
                         foreach ($pricingDetails as $key => $value) {
                             $priceDetailArr[$value['hour']] = $value['rate'];
                         }
-                        if(is_countable($priceDetailArr) && count($priceDetailArr) > 0){
-                            foreach($priceDetailArr as $hour => $rate){
-                                if($rate > 0){
+                        if (is_countable($priceDetailArr) && count($priceDetailArr) > 0) {
+                            foreach ($priceDetailArr as $hour => $rate) {
+                                if ($rate > 0) {
                                     $checkRate = checkRateWIthModelRate($hour, $rate, $vehicleModelId);
-                                    if(isset($checkRate) && is_countable($checkRate) && count($checkRate) > 0)
-                                    {
-                                        if($checkRate['status'] == false){
+                                    if (isset($checkRate) && is_countable($checkRate) && count($checkRate) > 0) {
+                                        if ($checkRate['status'] == false) {
                                             $updateStatus = false;
-                                            $messageList .=  $checkRate['message'].'. ';
+                                            $messageList .= $checkRate['message'] . '. ';
                                         }
                                     }
                                 }
                             }
-                        }   
-                        if($updateStatus == false){
+                        }
+                        if ($updateStatus == false) {
                             return $this->errorResponse($messageList);
-                        }                     
+                        }
                         asort($priceDetailArr);// make sort based on its value on ascending order
-                        if(is_countable($priceDetailArr) && count($priceDetailArr) > 0){
+                        if (is_countable($priceDetailArr) && count($priceDetailArr) > 0) {
                             foreach ($priceDetailArr as $key => $value) {
-                                if($value > 0){
+                                if ($value > 0) {
                                     $rentalPrice = $value;
                                     $rentalPriceHour = $key;
                                     break;
@@ -1735,18 +2139,18 @@ class CarHostManagementController extends Controller
                         $multipliers = []; // Array to hold the multipliers
                         foreach ($priceDetailArr as $key => $value) {
                             $multiplierVal = 0;
-                            if($rentalPrice <= $value){
+                            if ($rentalPrice <= $value) {
                                 $multiplierVal = ($value / $rentalPrice);
                             }
                             $multipliers[$key][$value] = round($multiplierVal, 2);
                         }
                         $vehiclePriceDetails = VehiclePriceDetail::where('vehicle_id', $vehicle->vehicle_id)->get();
-                        if(is_countable($vehiclePriceDetails) && count($vehiclePriceDetails) > 0){
+                        if (is_countable($vehiclePriceDetails) && count($vehiclePriceDetails) > 0) {
                             foreach ($vehiclePriceDetails as $key => $value) {
                                 $value->delete();
                             }
                         }
-                        if(is_countable($multipliers) && count($multipliers) > 0){
+                        if (is_countable($multipliers) && count($multipliers) > 0) {
                             foreach ($multipliers as $key => $value) {
                                 $vehiclePriceDetail = new VehiclePriceDetail();
                                 $vehiclePriceDetail->vehicle_id = $vehicle->vehicle_id;
@@ -1761,8 +2165,8 @@ class CarHostManagementController extends Controller
                                 }
                                 $vehiclePriceDetail->duration = ($key >= 24) ? round($key / 24, 2) . ' days' : $key . ' hours';
                                 $vehicleTypeName = $vehicle->model->category->vehicleType->name ?? null;
-                                $vehiclePriceDetail->trip_amount_km_limit = calculateKmLimit($key, $vehicleTypeName)." Km";
-                                $vehiclePriceDetail->save(); 
+                                $vehiclePriceDetail->trip_amount_km_limit = calculateKmLimit($key, $vehicleTypeName) . " Km";
+                                $vehiclePriceDetail->save();
                                 $updatedDetails[] = $vehiclePriceDetail;
 
                                 $vehicle->rental_price = $rentalPrice;
@@ -1772,7 +2176,7 @@ class CarHostManagementController extends Controller
                                 $isShow = 1;
                                 foreach ($pricingDetails as $item) {
                                     if (isset($item['hour'], $item['is_show']) && $item['hour'] == $targetHour) {
-                                        if($item['is_show'] == 0){
+                                        if ($item['is_show'] == 0) {
                                             $vehiclePriceDetail->is_show = 0;
                                             $vehiclePriceDetail->save();
                                         }
@@ -1782,18 +2186,19 @@ class CarHostManagementController extends Controller
                             return $this->successResponse(['vehicle_pricing_control' => $updatedDetails], 'Pricing Update Info updated successfully');
                         }
                     }
-                }else{
+                } else {
                     return $this->errorResponse('Pricing Update Info not found');
                 }
-            }else{
+            } else {
                 return $this->errorResponse('Vehicle not found');
             }
-        }else{
+        } else {
             return $this->errorResponse('Vehicle not found');
         }
     }
 
-    public function deleteHostVehicleImage(Request $request){
+    public function deleteHostVehicleImage(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'image_url' => 'required',
@@ -1804,22 +2209,23 @@ class CarHostManagementController extends Controller
 
         $baseName = basename($request->image_url);
         $carHostVehicleImage = CarHostVehicleImage::where('vehicle_img', $baseName)->first();
-        if($carHostVehicleImage != ''){
-            $filePath = public_path().'/images/car_host/'.basename($carHostVehicleImage->vehicle_img);
-            if(file_exists($filePath)){
+        if ($carHostVehicleImage != '') {
+            $filePath = public_path() . '/images/car_host/' . basename($carHostVehicleImage->vehicle_img);
+            if (file_exists($filePath)) {
                 unlink($filePath);
             }
             $carHostVehicleImage->delete();
             return $this->successResponse(null, 'Carhost vehicle image deleted successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost vehicle image not found');
         }
     }
-    
-    private function getCustomerStatus($customers){
+
+    private function getCustomerStatus($customers)
+    {
         $cStatus = '';
-        if($customers != ''){
-            if($customers->is_blocked == 1)
+        if ($customers != '') {
+            if ($customers->is_blocked == 1)
                 $cStatus = 'Bloked';
             else
                 $cStatus = 'Active';

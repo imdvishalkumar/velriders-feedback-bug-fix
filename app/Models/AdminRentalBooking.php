@@ -16,6 +16,7 @@ class AdminRentalBooking extends Model
 
     protected $fillable = [
         'customer_id',
+        'admin_id',
         'vehicle_id',
         'from_branch_id',
         'to_branch_id',
@@ -87,6 +88,17 @@ class AdminRentalBooking extends Model
     public function adminPenalties()
     {
         return $this->hasMany(AdminPenalty::class, 'booking_id', 'booking_id')->where('is_paid', 0);
+    }
+
+    public function cancellation()
+    {
+        return $this->hasOne(CancelRentalBooking::class, 'booking_id', 'booking_id');
+    }
+
+    public function assignedBy()
+    {
+        $adminPk = (new AdminUser)->getKeyName();
+        return $this->belongsTo(AdminUser::class, 'admin_id', $adminPk);
     }
 
     function convertToDouble($value)
@@ -458,12 +470,9 @@ class AdminRentalBooking extends Model
         return $calculation_details;
     }
 
-
-
     private function addToSummary(&$summary, $key, $value, $color, $style)
     {
-        //if ($value != 0) {
-        if ($value >= 0) {
+        if (isset($value) && $value !== '') {
             $summary[] = [
                 "key" => $key,
                 "value" => "₹ {$value}",
@@ -510,7 +519,7 @@ class AdminRentalBooking extends Model
     }
 
     //THIS FUNCTION PARAMETERS ARE DIFFERENCT THAN RENTALBOOKING MODEL
-    public function computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $unlimitedKms = false, $couponCode = null, $startDate = null, $endDate = null, $vehicleTypeId = null, $extend = false, $orderType = null, $customerId = NULL, $paymentMode = NULL, $refNumber = NULL, $vehicleCommissionPercent = 0, $taxRate = null, $tripAmt = 0, $unlimitedStatus = 0, $vehicleId = null, $unlimitedKmStatus = 1)
+    public function computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $unlimitedKms = false, $couponCode = null, $startDate = null, $endDate = null, $vehicleTypeId = null, $extend = false, $orderType = null, $customerId = NULL, $paymentMode = NULL, $refNumber = NULL, $vehicleCommissionPercent = 0, $taxRate = null, $tripAmt = 0, $unlimitedStatus = 0, $vehicleId = null, $unlimitedKmStatus = 1, $finalAmtStatus = 0, $finalAmt = 0)
     {
         // Initialize variables
         $couponDiscount = 0;
@@ -518,44 +527,70 @@ class AdminRentalBooking extends Model
         $refundableDeposit = 0;
         $tripDurationHours = $tripDurationMinutes / 60;
 
-        $tripAmount = 0;
-        if ($tripAmt == null) {
-            $tripAmount = calculateTripAmount($rentalPrice, $tripDurationHours, $vehicleId);
-        } else {
-            $tripAmount = $tripAmt;
-        }
-
-        // Calculate trip amount
-        if ($unlimitedKms) {
-            if ($orderType == 'extension') {
-                if ($unlimitedKmStatus == 0) {
-                    $tripAmount *= 1.3;
+        // 1. Calculate convenience fee (needed for reverse calculation)
+        $convenienceFee = 0;
+        if (!$extend) {
+            $convenienceFee = 99; // Default
+            if ($vehicleTypeId) {
+                $vType = VehicleType::where('type_id', $vehicleTypeId)->first();
+                if ($vType) {
+                    $convenienceFee = $vType->convenience_fees ?? 99;
                 }
-            } else {
-                $tripAmount *= 1.3;
             }
         }
 
-        // if ($unlimitedKms) {
-        //     if($unlimitedStatus == 1){
-        //         $tripAmount *= 1.3;
-        //     }
-        // }elseif(!$unlimitedKms && isset($tripAmt)){
-        //     $tripAmount = $tripAmt;
-        // }else{
-        //     $tripAmount = calculateTripAmount($rentalPrice, $tripDurationHours); 
-        // }
+        // 2. Base Trip Amount
+        $tripAmount = 0;
+        if ($finalAmtStatus == 1 && $finalAmt > 0) {
+            // Reverse calculation
+            $K = (float) $taxRate + ($vehicleCommissionPercent / 100) * 0.18;
+            $tripAmountToPay = ($finalAmt - $convenienceFee) / (1 + $K);
 
-        //if (!$extend && $couponCode && $startDate && $endDate) {
+            if ($couponCode && $startDate && $endDate) {
+                $coupon = Coupon::where('code', $couponCode)->where('is_active', 1)
+                    ->where('valid_from', '<=', $startDate)->where('valid_to', '>=', $endDate)->first();
+                if ($coupon) {
+                    if ($coupon->type === 'percentage') {
+                        $p = $coupon->percentage_discount / 100;
+                        if (($tripAmountToPay / (1 - $p)) * $p > $coupon->max_discount_amount) {
+                            $tripAmount = $tripAmountToPay + $coupon->max_discount_amount;
+                        } else {
+                            $tripAmount = $tripAmountToPay / (1 - $p);
+                        }
+                    } elseif ($coupon->type === 'fixed') {
+                        $tripAmount = $tripAmountToPay + $coupon->fixed_discount_amount;
+                    }
+                } else {
+                    $tripAmount = $tripAmountToPay;
+                }
+            } else {
+                $tripAmount = $tripAmountToPay;
+            }
+            $tripAmount = round($tripAmount, 2);
+        } else {
+            // Natural calculation
+            if ($tripAmt === null || $tripAmt === '') {
+                $tripAmount = calculateTripAmount($rentalPrice, $tripDurationHours, $vehicleId);
+            } else {
+                $tripAmount = (float) $tripAmt;
+            }
+
+            if ($unlimitedKms) {
+                if ($orderType == 'extension') {
+                    if ($unlimitedKmStatus == 0)
+                        $tripAmount *= 1.3;
+                } else {
+                    $tripAmount *= 1.3;
+                }
+            }
+        }
+
+        // 3. Coupon Discount (on calculated $tripAmount)
         if ($couponCode && $startDate && $endDate) {
-            $coupon = Coupon::where('code', $couponCode)
-                ->where('valid_from', '<=', $startDate)
-                ->where('valid_to', '>=', $endDate)
-                ->first();
-
-            //if ($coupon && $coupon->is_active && now()->between($coupon->valid_from, $coupon->valid_to)) {
-            if ($coupon && $coupon->is_active) { //UPDATED ON 6-8-25
-                $cCode = isset($coupon->code) ? $coupon->code : '';
+            $coupon = Coupon::where('code', $couponCode)->where('is_active', 1)
+                ->where('valid_from', '<=', $startDate)->where('valid_to', '>=', $endDate)->first();
+            if ($coupon) {
+                $cCode = $coupon->code;
                 if ($coupon->type === 'percentage') {
                     $couponDiscount = min($tripAmount * ($coupon->percentage_discount / 100), $coupon->max_discount_amount);
                 } elseif ($coupon->type === 'fixed') {
@@ -564,38 +599,23 @@ class AdminRentalBooking extends Model
             }
         }
 
-        // Calculate convenience fee
-        $convenienceFee = 0;
-        if (!$extend) {
-            $convenienceFee = 99; // Default convenience fee
-            if ($vehicleTypeId) {
-                $vehicleType = VehicleType::where('type_id', $vehicleTypeId)->first();
-                if ($vehicleType) {
-                    $convenienceFee = $vehicleType->convenience_fees ?? 99;
-                }
-            }
-        }
-
-        // Calculate total amount
+        // 4. Totals and Taxes
         $tripAmountToPay = (float) $tripAmount - $couponDiscount;
-        $vehicleCommissionTaxAmt = $vehicleCommissionAmt = 0;
+        $vehicleCommissionAmt = 0;
+        $vehicleCommissionTaxAmt = 0;
         if ($vehicleCommissionPercent > 0) {
-            $vehicleCommissionAmt = ($tripAmountToPay * $vehicleCommissionPercent) / 100;
-            $vehicleCommissionAmt = round($vehicleCommissionAmt);
-            //$tripAmount -= $vehicleCommissionAmt;
+            $vehicleCommissionAmt = round(($tripAmountToPay * $vehicleCommissionPercent) / 100);
             $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
         }
-        /*$customerGst = '';
-        if($customerId != NULL){
-            $user = Customer::where('customer_id', $customerId)->first();
-            $customerGst = $user->gst_number ?? '';    
-        }
-        $taxRate = $customerGst ? 0.18 : 0.05;*/
+
         $taxAmt = $tripAmountToPay * $taxRate;
         $taxAmt += $vehicleCommissionTaxAmt;
-        if ($tripAmt != null && $tripAmt == 0) {
+
+        // Override convenience fee if tripAmt is explicitly 0 (for natural calculation)
+        if ($finalAmtStatus == 0 && ($tripAmt !== null && $tripAmt !== '') && (float) $tripAmt == 0) {
             $convenienceFee = 0;
         }
+
         $totalAmount = $tripAmountToPay + $convenienceFee + $taxAmt;
         $finalAmount = $totalAmount;
         // Adjust total amount for extension

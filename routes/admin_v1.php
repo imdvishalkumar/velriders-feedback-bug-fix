@@ -122,6 +122,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('get-unpublish-vehicles', [CarHostManagementController::class, 'getUnpublishVehices']);
     Route::post('create-or-update-carhost', [CarHostManagementController::class, 'createOrUpdateCarHost']);
     Route::post('block-unblock-carhost', [CarHostManagementController::class, 'blockUnblockCarHost']);
+    Route::post('delete-carhost', [CarHostManagementController::class, 'deleteCarHost']);
     Route::get('get-carhost-pickuplocation', [CarHostManagementController::class, 'getCarHostPickupLocation']);
     Route::post('add-update-carhost-pickuplocation', [CarHostManagementController::class, 'addUpdateCarHostPickuplocation']);
     Route::post('set-primary-carhost-pickuplocation', [CarHostManagementController::class, 'setPrimaryCarHostPickuplocation']);

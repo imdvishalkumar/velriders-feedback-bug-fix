@@ -15,6 +15,7 @@ class AdminActivityLog extends Model
 
     public function adminDetails()
     {
-        return $this->belongsTo(AdminUser::class, 'admin_id', 'admin_id');
+        $adminPk = (new AdminUser)->getKeyName();
+        return $this->belongsTo(AdminUser::class, 'admin_id', $adminPk);
     }
 }

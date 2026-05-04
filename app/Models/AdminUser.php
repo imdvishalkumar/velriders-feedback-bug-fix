@@ -34,7 +34,7 @@ use Laravel\Sanctum\HasApiTokens; // FOR ADMIN API
 class AdminUser extends Authenticatable
 {
     use HasFactory, HasApiTokens, HasRoles;
-    
+
     protected $primaryKey = 'admin_id';
     protected $fillable = [
         'username',
@@ -42,6 +42,25 @@ class AdminUser extends Authenticatable
         'role',
         'mobile_number',
     ];
+
+    public function getKeyName()
+    {
+        static $detectedKey = null;
+        if ($detectedKey !== null) {
+            return $detectedKey;
+        }
+
+        $detectedKey = 'admin_id'; // Default
+        try {
+            // Check if admin_id exists in the table, if not fallback to id
+            if (!\Schema::hasColumn($this->getTable(), 'admin_id') && \Schema::hasColumn($this->getTable(), 'id')) {
+                $detectedKey = 'id';
+            }
+        } catch (\Exception $e) {
+            // Fallback to default if DB is not accessible
+        }
+        return $detectedKey;
+    }
 
     protected $hidden = [
         'password',

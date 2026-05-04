@@ -10,6 +10,9 @@ class CancelRentalBooking extends Model
     use HasFactory;
     protected $primaryKey = 'cancel_id';
     protected $guarded = [];
+    protected $casts = [
+        'data_json' => 'array',
+    ];
 
     public function rentalBooking()
     {
@@ -19,6 +22,11 @@ class CancelRentalBooking extends Model
     public function refund()
     {
         return $this->belongsTo(Refund::class, 'booking_id', 'booking_id');
+    }
+
+    public function cancelledBy()
+    {
+        return $this->belongsTo(AdminUser::class, 'cancelled_by', 'admin_id');
     }
 
 }
