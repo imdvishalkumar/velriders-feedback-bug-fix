@@ -66,7 +66,7 @@ function getIndianCurrency(float $number)
             $str[] = null;
     }
     $Rupees = implode('', array_reverse($str));
-    $paise = ($decimal > 0) ? "" . ucfirst($words[$decimal / 10] . " " . $words[$decimal % 10]) . ' Paise' : '';
+    $paise = ($decimal > 0) ? "" . ucfirst(($decimal < 21) ? $words[$decimal] : $words[floor($decimal / 10) * 10] . " " . $words[$decimal % 10]) . ' Paise' : '';
     return ($Rupees ? $Rupees . 'Rupees ' : '') . $paise;
 }
 

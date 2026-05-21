@@ -14,8 +14,8 @@ class CarHostManagementController extends Controller
 {
     public function getCarHosts(Request $request)
     {
-        $page = $request->input('page');
-        $pageSize = $request->input('page_size');
+        $page = $request->input('page', 1);
+        $pageSize = $request->input('page_size', 20);
         $orderColumn = $request->order_column ?? '';
         $orderType = $request->order_type ?? '';
         $orderTypes = config('global_values.order_types');
@@ -134,8 +134,8 @@ class CarHostManagementController extends Controller
 
     public function getCarHostChanges(Request $request)
     {
-        $page = $request->input('page');
-        $pageSize = $request->input('page_size');
+        $page = $request->input('page', 1);
+        $pageSize = $request->input('page_size', 20);
         $sectionId = $request->input('section_id');
         $search = $request->input('search');
 
@@ -156,7 +156,7 @@ class CarHostManagementController extends Controller
         }
 
         $data = [];
-        $isPaginated = ($page !== null && $pageSize !== null);
+        $isPaginated = $request->has('page');
 
         // 1. Pickup Locations
         if (!$sectionId || $sectionId == 'location-list') {
@@ -176,14 +176,14 @@ class CarHostManagementController extends Controller
             if ($isPaginated) {
                 $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
                 $data['pickup_locations'] = [
-                    'carHostPickupLocations' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'carHostPickupLocations' => $paginated->items(),
                     'pagination' => [
                         'total' => $paginated->total(),
                         'per_page' => $paginated->perPage(),
                         'current_page' => $paginated->currentPage(),
                         'last_page' => $paginated->lastPage(),
-                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
-                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                        'from' => $paginated->firstItem(),
+                        'to' => $paginated->lastItem(),
                     ]
                 ];
             } else {
@@ -223,32 +223,46 @@ class CarHostManagementController extends Controller
             }
 
             if ($isPaginated) {
-                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
-                foreach ($paginated as $v) {
-                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                $total = DB::table(DB::raw("({$query->toSql()}) as sub"))
+                    ->mergeBindings($query)
+                    ->count();
+
+                $items = $query->forPage($page, $pageSize)->get();
+
+                $vehicleIds = $items->pluck('vehicles_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
+                foreach ($items as $v) {
+                    $vehicle = $vehicles->get($v->vehicles_id);
                     if ($vehicle) {
-                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                        $v->vehicle = $vehicle;
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
+
                 $data['features'] = [
-                    'carHostVehicleFeatures' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'carHostVehicleFeatures' => $items,
                     'pagination' => [
-                        'total' => $paginated->total(),
-                        'per_page' => $paginated->perPage(),
-                        'current_page' => $paginated->currentPage(),
-                        'last_page' => $paginated->lastPage(),
-                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
-                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                        'total' => $total,
+                        'per_page' => $pageSize,
+                        'current_page' => (int) $page,
+                        'last_page' => ceil($total / $pageSize),
+                        'from' => ($page - 1) * $pageSize + 1,
+                        'to' => min($page * $pageSize, $total),
                     ]
                 ];
             } else {
                 $items = $query->get();
+                $vehicleIds = $items->pluck('vehicles_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
                 foreach ($items as $v) {
-                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                    $vehicle = $vehicles->get($v->vehicles_id);
                     if ($vehicle) {
-                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                        $v->vehicle = $vehicle;
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
                 $data['features'] = [
@@ -287,32 +301,46 @@ class CarHostManagementController extends Controller
             $query->orderByDesc('latest_created_at');
 
             if ($isPaginated) {
-                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
-                foreach ($paginated as $v) {
-                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                $total = DB::table(DB::raw("({$query->toSql()}) as sub"))
+                    ->mergeBindings($query)
+                    ->count();
+
+                $items = $query->forPage($page, $pageSize)->get();
+
+                $vehicleIds = $items->pluck('vehicles_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
+                foreach ($items as $v) {
+                    $vehicle = $vehicles->get($v->vehicles_id);
                     if ($vehicle) {
-                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                        $v->vehicle = $vehicle;
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
+
                 $data['images'] = [
-                    'carHostVehicleImages' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'carHostVehicleImages' => $items,
                     'pagination' => [
-                        'total' => $paginated->total(),
-                        'per_page' => $paginated->perPage(),
-                        'current_page' => $paginated->currentPage(),
-                        'last_page' => $paginated->lastPage(),
-                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
-                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                        'total' => $total,
+                        'per_page' => $pageSize,
+                        'current_page' => (int) $page,
+                        'last_page' => ceil($total / $pageSize),
+                        'from' => ($page - 1) * $pageSize + 1,
+                        'to' => min($page * $pageSize, $total),
                     ]
                 ];
             } else {
                 $items = $query->get();
+                $vehicleIds = $items->pluck('vehicles_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
                 foreach ($items as $v) {
-                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicles_id)->first();
+                    $vehicle = $vehicles->get($v->vehicles_id);
                     if ($vehicle) {
-                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                        $v->vehicle = $vehicle;
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
                 $data['images'] = [
@@ -345,22 +373,31 @@ class CarHostManagementController extends Controller
             if ($isPaginated) {
                 $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
                 foreach ($paginated as $v) {
-                    $v->makeHidden('branch_id', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model', 'color', 'host_step_count', 'license_plate', 'rental_price', 'publish', 'vehicle_created_by', 'apply_for_publish', 'temp_city_id', 'deposit_amount', 'is_deposit_amount_show', 'step_cnt', 'category_name', 'cutout_image', 'location', 'city_name', 'city_id');
-                    $vehicle = Vehicle::with('model.manufacturer')->where('vehicle_id', $v->vehicle_id)->first();
-                    if ($vehicle) {
-                        $vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
-                        $v->vehicle = $vehicle;
-                    }
+                    // Create a separate data structure for the frontend's VehicleInfoTable component to avoid recursion
+                    $v->vehicle = [
+                        'vehicle_id' => $v->vehicle_id,
+                        'vehicle_name' => $v->vehicle_name,
+                        'color' => $v->color,
+                        'license_plate' => $v->license_plate,
+                        'city_name' => $v->city_name,
+                        'location' => $v->location,
+                        'year' => $v->year,
+                        'cutout_image' => $v->cutout_image,
+                        'cutout_optimize_image' => $v->cutout_optimize_image,
+                        'model' => $v->model,
+                    ];
+
+                    $v->makeHidden(['branch_id', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model', 'color', 'host_step_count', 'license_plate', 'rental_price', 'publish', 'vehicle_created_by', 'apply_for_publish', 'temp_city_id', 'deposit_amount', 'is_deposit_amount_show', 'step_cnt', 'category_name', 'cutout_image', 'location', 'city_name', 'city_id']);
                 }
                 $data['vehicle_details'] = [
-                    'carHostVehicleDetails' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'carHostVehicleDetails' => $paginated->items(),
                     'pagination' => [
                         'total' => $paginated->total(),
                         'per_page' => $paginated->perPage(),
                         'current_page' => $paginated->currentPage(),
                         'last_page' => $paginated->lastPage(),
-                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
-                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                        'from' => $paginated->firstItem(),
+                        'to' => $paginated->lastItem(),
                     ]
                 ];
             } else {
@@ -381,12 +418,22 @@ class CarHostManagementController extends Controller
 
         // 5. Documents
         if (!$sectionId || $sectionId == 'host-vehicle-documents-list') {
-            $query = VehicleDocumentTemp::with('vehicle.model.manufacturer')
-                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicle_document_temps.vehicle_id')
+            $query = DB::table('vehicle_document_temps as doc')
+                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'doc.vehicle_id')
                 ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
-                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'vehicle_document_temps.vehicle_id')
+                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'doc.vehicle_id')
                 ->join('vehicle_models as vm', 'vm.model_id', '=', 'veh.model_id')
-                ->select('vehicle_document_temps.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email');
+                ->select(
+                    'doc.vehicle_id',
+                    DB::raw('MAX(h.id) as host_id'),
+                    DB::raw('MAX(h.firstname) as firstname'),
+                    DB::raw('MAX(h.lastname) as lastname'),
+                    DB::raw('MAX(h.mobile_number) as mobile_number'),
+                    DB::raw('MAX(h.email) as email'),
+                    DB::raw('MAX(doc.document_type) as document_type'), // Just showing one as a sample
+                    DB::raw('MAX(doc.created_at) as latest_created_at')
+                )
+                ->groupBy('doc.vehicle_id');
 
             if ($search) {
                 $query->where(function ($q) use ($search) {
@@ -398,35 +445,51 @@ class CarHostManagementController extends Controller
                 });
             }
 
-            $query->orderBy('vehicle_document_temps.created_at', 'DESC');
+            $query->orderByDesc('latest_created_at');
 
             if ($isPaginated) {
-                $paginated = $query->paginate($pageSize, ['*'], 'page', $page);
-                foreach ($paginated as $v) {
+                $total = DB::table(DB::raw("({$query->toSql()}) as sub"))
+                    ->mergeBindings($query)
+                    ->count();
+
+                $items = $query->forPage($page, $pageSize)->get();
+
+                $vehicleIds = $items->pluck('vehicle_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
+                foreach ($items as $v) {
                     $v->document_type = ucwords(str_replace('_', ' ', $v->document_type));
-                    $v->makeHidden('is_approved', 'approved_by', 'image_type', 'created_at', 'updated_at');
-                    if ($v->vehicle) {
-                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    $vehicle = $vehicles->get($v->vehicle_id);
+                    if ($vehicle) {
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
+
                 $data['carHostVehicleDocuments'] = [
-                    'carHostVehicleDocuments' => json_decode(json_encode($paginated->getCollection()->values()), FALSE),
+                    'carHostVehicleDocuments' => $items,
                     'pagination' => [
-                        'total' => $paginated->total(),
-                        'per_page' => $paginated->perPage(),
-                        'current_page' => $paginated->currentPage(),
-                        'last_page' => $paginated->lastPage(),
-                        'from' => ($paginated->currentPage() - 1) * $paginated->perPage() + 1,
-                        'to' => min($paginated->currentPage() * $paginated->perPage(), $paginated->total()),
+                        'total' => $total,
+                        'per_page' => $pageSize,
+                        'current_page' => (int) $page,
+                        'last_page' => ceil($total / $pageSize),
+                        'from' => ($page - 1) * $pageSize + 1,
+                        'to' => min($page * $pageSize, $total),
                     ]
                 ];
             } else {
-                $items = $query->get()->values();
+                $items = $query->get();
+                $vehicleIds = $items->pluck('vehicle_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
                 foreach ($items as $v) {
                     $v->document_type = ucwords(str_replace('_', ' ', $v->document_type));
-                    $v->makeHidden('is_approved', 'approved_by', 'image_type', 'created_at', 'updated_at');
-                    if ($v->vehicle) {
-                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    $vehicle = $vehicles->get($v->vehicle_id);
+                    if ($vehicle) {
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
                 $data['carHostVehicleDocuments'] = [
@@ -437,12 +500,21 @@ class CarHostManagementController extends Controller
 
         // 6. Price Details
         if (!$sectionId || $sectionId == 'vehicle-price-details-list') {
-            $query = VehiclePriceDetailTemp::with('vehicle.model.manufacturer')
-                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'vehicle_price_detail_temps.vehicle_id')
+            $query = DB::table('vehicle_price_detail_temps as p')
+                ->join('car_eligibilities as v', 'v.vehicle_id', '=', 'p.vehicle_id')
                 ->join('car_hosts as h', 'h.id', '=', 'v.car_hosts_id')
-                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'vehicle_price_detail_temps.vehicle_id')
+                ->join('vehicles as veh', 'veh.vehicle_id', '=', 'p.vehicle_id')
                 ->join('vehicle_models as vm', 'vm.model_id', '=', 'veh.model_id')
-                ->select('vehicle_price_detail_temps.*', 'h.id as host_id', 'h.firstname', 'h.lastname', 'h.mobile_number', 'h.email');
+                ->select(
+                    'p.vehicle_id',
+                    DB::raw('MAX(h.id) as host_id'),
+                    DB::raw('MAX(h.firstname) as firstname'),
+                    DB::raw('MAX(h.lastname) as lastname'),
+                    DB::raw('MAX(h.mobile_number) as mobile_number'),
+                    DB::raw('MAX(h.email) as email'),
+                    DB::raw('MAX(p.created_at) as latest_created_at')
+                )
+                ->groupBy('p.vehicle_id');
 
             if ($search) {
                 $query->where(function ($q) use ($search) {
@@ -454,24 +526,49 @@ class CarHostManagementController extends Controller
                 });
             }
 
-            $query->orderBy('created_at', 'desc');
+            $query->orderByDesc('latest_created_at');
 
-            // Prices are not paginated using standard approach in current code, maintaining that logic
             if ($isPaginated) {
-                $items = $query->get()->unique('vehicle_id')->values();
+                $total = DB::table(DB::raw("({$query->toSql()}) as sub"))
+                    ->mergeBindings($query)
+                    ->count();
+
+                $items = $query->forPage($page, $pageSize)->get();
+
+                $vehicleIds = $items->pluck('vehicle_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
                 foreach ($items as $v) {
-                    if ($v->vehicle) {
-                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    $vehicle = $vehicles->get($v->vehicle_id);
+                    if ($vehicle) {
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
+
                 $data['Price_details'] = [
                     'carHostVehiclePriceDetails' => $items,
+                    'pagination' => [
+                        'total' => $total,
+                        'per_page' => $pageSize,
+                        'current_page' => (int) $page,
+                        'last_page' => ceil($total / $pageSize),
+                        'from' => ($page - 1) * $pageSize + 1,
+                        'to' => min($page * $pageSize, $total),
+                    ]
                 ];
             } else {
-                $items = $query->get()->unique('rental_price')->values(); // Original code used 'rental_price' here
+                $items = $query->get();
+                $vehicleIds = $items->pluck('vehicle_id')->unique();
+                $vehicles = Vehicle::with('model.manufacturer')->whereIn('vehicle_id', $vehicleIds)->get()->keyBy('vehicle_id');
+
                 foreach ($items as $v) {
-                    if ($v->vehicle) {
-                        $v->vehicle->makeHidden('branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model');
+                    $vehicle = $vehicles->get($v->vehicle_id);
+                    if ($vehicle) {
+                        $clonedVehicle = clone $vehicle;
+                        $clonedVehicle->makeHidden(['branch_id', 'year', 'description', 'availability', 'is_deleted', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'chassis_no', 'created_at', 'updated_at', 'nick_name', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'model']);
+                        $v->vehicle = $clonedVehicle;
                     }
                 }
                 $data['Price_details'] = [
@@ -499,7 +596,8 @@ class CarHostManagementController extends Controller
     public function getUnpublishVehices(Request $request)
     {
         $page = $request->input('page');
-        $pageSize = $request->input('page_size');
+        $page = $request->input('page', 1);
+        $pageSize = $request->input('page_size', 20);
         $search = $request->input('search');
 
         $query = Vehicle::join('vehicle_models as vm', 'vm.model_id', '=', 'vehicles.model_id')

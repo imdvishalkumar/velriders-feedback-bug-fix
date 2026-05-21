@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use App\Models\{Branch, CarHostPickupLocation, City};
 
 class AdminRentalBooking extends Model
 {
@@ -31,11 +32,15 @@ class AdminRentalBooking extends Model
         //'calculation_details',
         'start_otp',
         'end_otp',
+        'otp_verified_at',
         'data_json',
         'rental_duration',
         'sequence_no',
         'tax_rate',
         'is_end_by_admin',
+        'initial_vehicle_id',
+        'location_id',
+        'location_from',
     ];
 
     protected $hidden = [
@@ -44,7 +49,30 @@ class AdminRentalBooking extends Model
         'updated_at',
     ];
 
-    protected $appends = ['start_images', 'end_images', 'price_summary', 'admin_button_visibility'];
+    protected $appends = ['city_name', 'start_images', 'end_images', 'price_summary', 'admin_button_visibility', 'host_payment_date'];
+
+    public function getCityNameAttribute()
+    {
+        $cityName = '';
+        if ($this->location_from == 1) { // Branch
+            $branch = Branch::where('branch_id', $this->location_id)->first();
+            if ($branch && $branch->city) {
+                $cityName = $branch->city->name;
+            }
+        } else if ($this->location_from == 2) { // CarHostPickupLocation
+            $location = CarHostPickupLocation::where('id', $this->location_id)->with('city')->first();
+            if ($location && $location->city) {
+                $cityName = $location->city->name;
+            }
+        }
+
+        // Fallback to current vehicle city if not found (for old data where location_id might be null)
+        if ($cityName == '' && $this->vehicle) {
+            $cityName = $this->vehicle->city_name;
+        }
+
+        return $cityName;
+    }
 
     // Define relationships
     public function payment()
@@ -566,7 +594,9 @@ class AdminRentalBooking extends Model
             } else {
                 $tripAmount = $tripAmountToPay;
             }
-            $tripAmount = round($tripAmount, 2);
+            if ($finalAmtStatus == 0) {
+                $tripAmount = round($tripAmount, 2);
+            }
         } else {
             // Natural calculation
             if ($tripAmt === null || $tripAmt === '') {
@@ -604,7 +634,10 @@ class AdminRentalBooking extends Model
         $vehicleCommissionAmt = 0;
         $vehicleCommissionTaxAmt = 0;
         if ($vehicleCommissionPercent > 0) {
-            $vehicleCommissionAmt = round(($tripAmountToPay * $vehicleCommissionPercent) / 100);
+            $vehicleCommissionAmt = ($tripAmountToPay * $vehicleCommissionPercent) / 100;
+            if ($finalAmtStatus == 0) {
+                $vehicleCommissionAmt = round($vehicleCommissionAmt);
+            }
             $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
         }
 
@@ -791,4 +824,13 @@ class AdminRentalBooking extends Model
         return $data;
     }
 
+    public function paymentReportHistory()
+    {
+        return $this->hasOne(PaymentReportHistory::class, 'booking_id', 'booking_id')->where('is_completed', true);
+    }
+
+    public function getHostPaymentDateAttribute()
+    {
+        return $this->paymentReportHistory && $this->paymentReportHistory->exported_at ? $this->paymentReportHistory->exported_at->format('d-m-Y') : null;
+    }
 }

@@ -14,7 +14,6 @@ class RentalBookingImage extends Model
     ];
 
     protected $hidden = [
-        'id',
         'booking_id',
         'image_type',
         'created_at',

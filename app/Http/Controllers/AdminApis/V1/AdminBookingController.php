@@ -81,7 +81,7 @@ class AdminBookingController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        $rentalBooking = AdminRentalBooking::with(['customer', 'vehicle']);
+        $rentalBooking = AdminRentalBooking::with(['customer', 'vehicle', 'paymentReportHistory']);
         if ($request->status && strtolower($request->status) != 'all' && $request->status != '') {
             $rentalBooking = $rentalBooking->where('status', $request->status);
         }
@@ -101,8 +101,15 @@ class AdminBookingController extends Controller
             });
         }
         if ($request->assigned_by != '') {
+            $assignedBy = $request->assigned_by;
             if (\Schema::hasColumn('rental_bookings', 'admin_id')) {
-                $rentalBooking = $rentalBooking->where('admin_id', $request->assigned_by);
+                if (is_numeric($assignedBy)) {
+                    $rentalBooking = $rentalBooking->where('admin_id', $assignedBy);
+                } else {
+                    $rentalBooking = $rentalBooking->whereHas('assignedBy', function ($sub) use ($assignedBy) {
+                        $sub->where('username', $assignedBy);
+                    });
+                }
             }
         }
         // Filter by Pickup and Return date
@@ -1098,7 +1105,7 @@ class AdminBookingController extends Controller
             'customer_id' => 'required|exists:customers,customer_id',
             'vehicle_id' => 'required|exists:vehicles,vehicle_id',
             'booking_start_date' => 'required|date',
-            'booking_end_date' => 'required|date|after:start_date',
+            'booking_end_date' => 'required|date|after:booking_start_date',
             'coupon_code' => ['nullable', 'string', 'exists:coupons,code', new CheckCoupon()],
             'trip_amt_status' => 'required|in:0,1',
             'final_amt_status' => 'nullable|in:0,1', //0 means normal calculation, 1 means final amount manually entered
@@ -1213,7 +1220,7 @@ class AdminBookingController extends Controller
         }
 
         $bookingTransaction = '';
-        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle.vehicleEligibility.carHost', 'payment'])->where('booking_id', $request->booking_id)->first();
+        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle.vehicleEligibility.carHost', 'payment', 'paymentReportHistory'])->where('booking_id', $request->booking_id)->first();
         if ($rentalBookingDetails) {
             $providerAddress = '';
             if ($rentalBookingDetails->vehicle && $rentalBookingDetails->vehicle->vehicleEligibility && $rentalBookingDetails->vehicle->vehicleEligibility->carHost) {
@@ -1226,6 +1233,9 @@ class AdminBookingController extends Controller
             }
 
             if ($rentalBookingDetails->customer) {
+                if (empty($rentalBookingDetails->customer->shipping_address)) {
+                    $rentalBookingDetails->customer->shipping_address = $rentalBookingDetails->customer->billing_address;
+                }
                 $rentalBookingDetails->customer->billing_address = $providerAddress;
             }
             $rentalBookingDetails->owner_billing_address = $providerAddress;
@@ -1283,7 +1293,7 @@ class AdminBookingController extends Controller
         $rentalBookingDetails->vehicle->makeHidden(['availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating', 'total_rating', 'trip_count']);
         $rentalBookingDetails->total_cost = getPaidFinalAmtSum($rentalBookingDetails->booking_id);
 
-        $hostInvoicePdf = url('api/host/v1/carhost-booking-invoice/' . $request->booking_id);
+        $hostInvoicePdf = (isset($rentalBookingDetails->status) && in_array(strtolower($rentalBookingDetails->status), ['confirmed', 'completed', 'running'])) ? url('api/host/v1/carhost-booking-invoice/' . $request->booking_id) : null;
 
         $rentalBookingDetails->host_invoice_pdf = $hostInvoicePdf;
 
@@ -1314,6 +1324,8 @@ class AdminBookingController extends Controller
                         'username' => $history->updatedBy->username,
                     ] : null,
                     'created_at' => $history->created_at,
+                    'old_invoice_pdf' => $history->oldVehicle ? url('api/admin/v1/vehicle-change-invoice/' . $history->id . '?type=old') : null,
+                    'new_invoice_pdf' => url('api/admin/v1/vehicle-change-invoice/' . $history->id . '?type=new'),
                 ];
             });
 
@@ -1416,7 +1428,7 @@ class AdminBookingController extends Controller
             $vehicleId = $request->vehicle_id;
             $bookingId = $request->booking_id;
             $changeReason = $request->vehicle_change_reason ?? '';
-            $changeDatetime = $request->vehicle_change_datetime ?? '';
+            $changeDatetime = $request->vehicle_change_datetime ?? now()->toDateTimeString();
             $oldVal = $newVal = '';
             // if($vehicleId != '' && $bookingId != ''){
             //     $rentalBooking = AdminRentalBooking::where('booking_id', $bookingId)->first();
@@ -1468,6 +1480,40 @@ class AdminBookingController extends Controller
             // }
             if ($vehicleId != '' && $bookingId != '') {
                 $rentalBooking = AdminRentalBooking::where('booking_id', $bookingId)->first();
+                if (!$rentalBooking) {
+                    return $this->errorResponse("Booking not found.");
+                }
+
+                // Check for overlapping bookings for the new vehicle
+                $existingBookings = RentalBooking::where('vehicle_id', $vehicleId)
+                    ->whereIn('status', ['running', 'confirmed'])
+                    ->where('booking_id', '!=', $bookingId)
+                    ->where(function ($query) use ($rentalBooking) {
+                        $query->whereBetween('pickup_date', [$rentalBooking->pickup_date, $rentalBooking->return_date])
+                            ->orWhereBetween('return_date', [$rentalBooking->pickup_date, $rentalBooking->return_date])
+                            ->orWhere(function ($query) use ($rentalBooking) {
+                                $query->where('pickup_date', '<', $rentalBooking->pickup_date)
+                                    ->where('return_date', '>', $rentalBooking->return_date);
+                            });
+                    })->exists();
+
+                if ($existingBookings) {
+                    return $this->errorResponse("The selected vehicle is already booked for this time period.");
+                }
+
+                // Check for vehicle type consistency
+                $oldVehicle = Vehicle::with('model.category')->where('vehicle_id', $rentalBooking->vehicle_id)->first();
+                $newVehicle = Vehicle::with('model.category')->where('vehicle_id', $vehicleId)->first();
+
+                if ($oldVehicle && $newVehicle) {
+                    $oldType = $oldVehicle->model?->category?->vehicle_type_id ?? null;
+                    $newType = $newVehicle->model?->category?->vehicle_type_id ?? null;
+
+                    if ($oldType != $newType) {
+                        return $this->errorResponse("You can only change the vehicle to one of the same type (e.g., Bike to Bike, Car to Car).");
+                    }
+                }
+
                 $oldVal = clone $rentalBooking;
                 $oldVehicleId = $rentalBooking->vehicle_id;
 
@@ -1543,7 +1589,7 @@ class AdminBookingController extends Controller
                 }
                 // Store vehicle update history with booking transactions data
                 $adminUserId = auth()->user() ? auth()->user()->admin_id : null;
-                VehicleUpdateHistory::create([
+                $history = VehicleUpdateHistory::create([
                     'booking_id' => $bookingId,
                     'old_vehicle_id' => $oldVehicleId,
                     'new_vehicle_id' => $vehicleId,
@@ -2137,5 +2183,94 @@ class AdminBookingController extends Controller
             }
             return $this->successResponse($cancelRentalBooking, "Cancellation of the booking has been successfully reversed.");
         }
+    }
+    public function uploadBookingImages(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'booking_id' => 'required|exists:rental_bookings,booking_id',
+            'image_type' => 'required|in:start,end',
+            'images' => 'required|array',
+            'images.*' => 'required|image|mimetypes:image/heic,image/heif,image/jpeg,image/png,image/jpg,image/bmp,image/gif,image/svg,image/webp|max:10000',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $bookingId = $request->booking_id;
+        $imageType = $request->image_type;
+        $imageUrls = [];
+
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $key => $image) {
+                $filename = $imageType . '_journey_' . $key . '_' . time() . '.' . $image->getClientOriginalExtension();
+                $image->move(public_path('images/rental_booking_images'), $filename);
+                $imageUrls[] = $filename;
+            }
+
+            foreach ($imageUrls as $imageUrl) {
+                $rentalBookingImage = new RentalBookingImage();
+                $rentalBookingImage->booking_id = $bookingId;
+                $rentalBookingImage->image_type = $imageType;
+                $rentalBookingImage->image_url = $imageUrl;
+                $rentalBookingImage->save();
+            }
+        }
+
+        return $this->successResponse($imageUrls, 'Images uploaded successfully');
+    }
+
+    public function deleteBookingImage(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'image_id' => 'required|exists:rental_booking_images,id',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $rentalBookingImage = RentalBookingImage::find($request->image_id);
+        if ($rentalBookingImage) {
+            $filePath = public_path('images/rental_booking_images/' . $rentalBookingImage->image_url);
+            if (file_exists($filePath)) {
+                unlink($filePath);
+            }
+            $rentalBookingImage->delete();
+        }
+
+        return $this->successResponse([], 'Image deleted successfully');
+    }
+
+    public function updateBookingImage(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'image_id' => 'required|exists:rental_booking_images,id',
+            'image' => 'required|image|mimetypes:image/heic,image/heif,image/jpeg,image/png,image/jpg,image/bmp,image/gif,image/svg,image/webp|max:10000',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->validationErrorResponse($validator);
+        }
+
+        $rentalBookingImage = RentalBookingImage::find($request->image_id);
+        if ($rentalBookingImage && $request->hasFile('image')) {
+            // Delete old file
+            $oldFilePath = public_path('images/rental_booking_images/' . $rentalBookingImage->image_url);
+            if (file_exists($oldFilePath)) {
+                unlink($oldFilePath);
+            }
+
+            // Upload new file
+            $image = $request->file('image');
+            $filename = $rentalBookingImage->image_type . '_journey_' . time() . '.' . $image->getClientOriginalExtension();
+            $image->move(public_path('images/rental_booking_images'), $filename);
+
+            // Update record
+            $rentalBookingImage->image_url = $filename;
+            $rentalBookingImage->save();
+        }
+
+        return $this->successResponse($rentalBookingImage, 'Image updated successfully');
     }
 }

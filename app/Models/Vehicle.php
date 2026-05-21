@@ -34,7 +34,7 @@ class Vehicle extends Model
         'temp_city_id',
         'apply_for_publish',
         'nick_name',
-        'deposit_amount', 
+        'deposit_amount',
         'is_deposit_amount_show',
         'step_cnt',
         'updated_temp_city_id',
@@ -52,7 +52,7 @@ class Vehicle extends Model
         'created_at',
         'updated_at',
     ];
-    protected $appends = ['vehicle_name', 'category_name', /*'price_pr_hour',*/ 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images' ,'rating' , 'total_rating' , 'trip_count', 'location', 'city_name', 'city_id'];
+    protected $appends = ['vehicle_name', 'category_name', /*'price_pr_hour',*/ 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'host_banner_images', 'host_regular_images', 'rating', 'total_rating', 'trip_count', 'location', 'city_name', 'city_id'];
 
     public function model()
     {
@@ -92,30 +92,30 @@ class Vehicle extends Model
     public function images()
     {
         return $this->hasMany(VehicleImage::class, 'vehicle_id', 'vehicle_id');
-    }   
+    }
 
     public function pricingDetails()
     {
         return $this->hasMany(VehiclePriceDetail::class, 'vehicle_id', 'vehicle_id');
     }
-    
+
     public function hostVehicleImages()
     {
         return $this->hasMany(CarHostVehicleImage::class, 'vehicles_id', 'vehicle_id');
     }
 
     public function getCityNameAttribute()
-    {   
+    {
         $cityName = '';
-        if($this->branch_id != NULL){
+        if ($this->branch_id != NULL) {
             $branch = Branch::where('branch_id', $this->branch_id)->first();
-            if($branch->city){
-                $cityName = $branch->city->name; 
+            if ($branch->city) {
+                $cityName = $branch->city->name;
             }
-        }else{
+        } else {
             $carEligibility = CarEligibility::where('vehicle_id', $this->vehicle_id)->with('vehiclePickupLocation')->first();
-            if($carEligibility != '' && $carEligibility->vehiclePickupLocation){
-                if($carEligibility->vehiclePickupLocation->city){
+            if ($carEligibility != '' && $carEligibility->vehiclePickupLocation) {
+                if ($carEligibility->vehiclePickupLocation->city) {
                     $cityName = $carEligibility->vehiclePickupLocation->city->name;
                 }
             }
@@ -125,17 +125,17 @@ class Vehicle extends Model
     }
 
     public function getCityIdAttribute()
-    {   
+    {
         $cityId = '';
-        if($this->branch_id != NULL){
+        if ($this->branch_id != NULL) {
             $branch = Branch::where('branch_id', $this->branch_id)->first();
-            if($branch->city){
-                $cityId = $branch->city->id; 
+            if ($branch->city) {
+                $cityId = $branch->city->id;
             }
-        }else{
+        } else {
             $carEligibility = CarEligibility::where('vehicle_id', $this->vehicle_id)->with('vehiclePickupLocation')->first();
-            if($carEligibility != '' && $carEligibility->vehiclePickupLocation){
-                if($carEligibility->vehiclePickupLocation->city){
+            if ($carEligibility != '' && $carEligibility->vehiclePickupLocation) {
+                if ($carEligibility->vehiclePickupLocation->city) {
                     $cityId = $carEligibility->vehiclePickupLocation->city->id;
                 }
             }
@@ -145,27 +145,27 @@ class Vehicle extends Model
     }
 
     public function getRatingAttribute()
-    {       
+    {
         $totalRating = RentalReview::where('vehicle_id', $this->vehicle_id)->avg('rating');
         return round($totalRating, 2);
     }
 
     public function getTotalRatingAttribute()
-    {   
-        $count = RentalReview::where('vehicle_id',  $this->vehicle_id)
-        ->count();
+    {
+        $count = RentalReview::where('vehicle_id', $this->vehicle_id)
+            ->count();
 
         return $count;
 
     }
 
     public function getTripCountAttribute()
-    {   
-        $count = RentalBooking::where('vehicle_id',  $this->vehicle_id)->where('status', 'completed')
-        ->count();
+    {
+        $count = RentalBooking::where('vehicle_id', $this->vehicle_id)->where('status', 'completed')
+            ->count();
 
         return $count;
-        
+
     }
 
     public function getBannerImageAttribute()
@@ -175,11 +175,11 @@ class Vehicle extends Model
     }
 
     public function getCutoutImageAttribute()
-    {   
+    {
         $bannerImage = $this->images()->where('image_type', 'cutout')->first();
-        if(isset($bannerImage) && $bannerImage != ''){
+        if (isset($bannerImage) && $bannerImage != '') {
             return $bannerImage ? $bannerImage->image_url : null;
-        }else{
+        } else {
             $modelImage = $this->model->model_image;
             return $modelImage;
         }
@@ -232,57 +232,59 @@ class Vehicle extends Model
     public function getCategoryNameAttribute()
     {
         $catName = '';
-        if($this->model->category){
+        if ($this->model->category) {
             $catName = $this->model->category->name;
             return $catName;
-        }else{
+        } else {
             return $catName;
         }
     }
 
-    public function carHostVehicleImages(){
-         return $this->hasMany(CarHostVehicleImage::class, 'vehicles_id', 'vehicle_id');
+    public function carHostVehicleImages()
+    {
+        return $this->hasMany(CarHostVehicleImage::class, 'vehicles_id', 'vehicle_id');
     }
     public function carhostFeatures()
     {
         return $this->belongsToMany(VehicleFeature::class, 'car_host_vehicle_features', 'vehicles_id', 'feature_id');
     }
-    public function CarHostVehicleFeatures(){
-         return $this->hasMany(CarHostVehicleFeature::class, 'vehicles_id', 'vehicle_id');
+    public function CarHostVehicleFeatures()
+    {
+        return $this->hasMany(CarHostVehicleFeature::class, 'vehicles_id', 'vehicle_id');
     }
 
     public function getLocationAttribute()
     {
         $location = null;
-        if($this->branch_id != ''){
+        if ($this->branch_id != '') {
             $branch = Branch::where('branch_id', $this->branch_id)->first();
-            if($branch != ''){
+            if ($branch != '') {
                 $location['name'] = $branch->name ?? '';
                 $location['manager_name'] = $branch->manager_name ?? '';
                 $location['address'] = $branch->address ?? '';
-                $location['latitude'] = (double)$branch->latitude ?? 0.00;
-                $location['longitude'] = (double)$branch->longitude ?? 0.00;
+                $location['latitude'] = (double) $branch->latitude ?? 0.00;
+                $location['longitude'] = (double) $branch->longitude ?? 0.00;
                 $location['phone'] = $branch->phone ?? '';
             }
-        } else if($this->branch_id == ''){
+        } else if ($this->branch_id == '') {
             // $branch = CarHostPickupLocation::with('carEligibility', 'carEligibility.carHost')->where('vehicles_id', $this->vehicle_id)->where('is_primary', 1)->first();
             $carEligibility = CarEligibility::where('vehicle_id', $this->vehicle_id)->with('vehiclePickupLocation')->first();
             $managerName = $phone = '';
-            if($carEligibility != '' && $carEligibility->vehiclePickupLocation){
-                if($carEligibility && $carEligibility->carHost){
+            if ($carEligibility != '' && $carEligibility->vehiclePickupLocation) {
+                if ($carEligibility && $carEligibility->carHost) {
                     $managerName .= $carEligibility->carHost->firstname ?? '';
-                    $managerName .= ' '.$carEligibility->carHost->lastname ?? '';    
+                    $managerName .= ' ' . $carEligibility->carHost->lastname ?? '';
                     $phone = $carEligibility->carHost->mobile_number ?? '';
                 }
                 $location['name'] = $carEligibility->vehiclePickupLocation->name ?? '';
                 $location['manager_name'] = $managerName;
                 $location['address'] = $carEligibility->vehiclePickupLocation->location ?? '';
-                $location['latitude'] = (double)$carEligibility->vehiclePickupLocation->latitude ?? 0.00;
-                $location['longitude'] = (double)$carEligibility->vehiclePickupLocation->longitude ?? 0.00;
+                $location['latitude'] = (double) $carEligibility->vehiclePickupLocation->latitude ?? 0.00;
+                $location['longitude'] = (double) $carEligibility->vehiclePickupLocation->longitude ?? 0.00;
                 $location['phone'] = $phone;
             }
         }
-        
+
         return $location;
     }
 
@@ -290,10 +292,9 @@ class Vehicle extends Model
     {
         return $this->hasMany(RentalBooking::class, 'vehicle_id')->whereIn('status', ['running', 'confirmed']);
     }
-  
+
     public function vehicleDocuments()
     {
         return $this->hasMany(VehicleDocument::class, 'vehicle_id', 'vehicle_id');
-    } 
-    
+    }
 }

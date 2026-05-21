@@ -11,7 +11,7 @@ class RentalReview extends Model
 
     protected $primaryKey = 'review_id';
 
-    protected $fillable = ['vehicle_id','booking_id', 'customer_id', 'rating', 'review_text'];
+    protected $fillable = ['vehicle_id', 'booking_id', 'customer_id', 'rating', 'review_text'];
 
     public function vehicle()
     {

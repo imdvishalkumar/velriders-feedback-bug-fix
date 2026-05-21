@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use App\Services\SmsService;
 use App\Services\Invoice\InvoiceCalculationService;
-use App\Models\{AdminUser, Vehicle, Customer, CustomerDocument, RentalBooking, BookingTransaction, OfferDate, CompanyDetail, CarEligibility};
+use App\Models\{AdminUser, Vehicle, Customer, CustomerDocument, RentalBooking, BookingTransaction, OfferDate, CompanyDetail, CarEligibility, VehicleUpdateHistory};
+use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
@@ -140,11 +141,21 @@ class LoginController extends Controller
             'groupedTotals' => $groupedTotals,
         ]);
 
+        // Get CarHost Details for the invoice
+        $carHost = null;
+        if (isset($data->vehicle) && isset($data->vehicle->vehicle_id)) {
+            $carEligibility = \App\Models\CarEligibility::where('vehicle_id', $data->vehicle->vehicle_id)->with('carHost')->first();
+            if ($carEligibility && $carEligibility->carHost) {
+                $carHost = $carEligibility->carHost;
+            }
+        }
+
         // Generate PDF
         $filename = 'booking-invoice-' . $bookingId . '.pdf';
-        $pdf = PDF::loadView('booking-invoice', compact(
+        $pdf = PDF::loadView('host-invoice', compact(
             'data',
             'companyDetails',
+            'carHost',
             'newBooking',
             'extension',
             'completion',
@@ -2064,6 +2075,163 @@ class LoginController extends Controller
         } else {
             return $this->errorResponse('User not Found');
         }
+    }
+
+    public function vehicleChangeInvoiceData(Request $request, $historyId)
+    {
+        $type = $request->get('type', 'new'); // 'old' or 'new'
+        $history = VehicleUpdateHistory::with([
+            'booking.customer',
+            'oldVehicle.model.manufacturer',
+            'oldVehicle.vehicleEligibility.carHost',
+            'newVehicle.model.manufacturer',
+            'newVehicle.vehicleEligibility.carHost'
+        ])->where('id', $historyId)->first();
+
+        if (!$history) {
+            return $this->errorResponse('Vehicle change history not found');
+        }
+
+        $bookingId = $history->booking_id;
+        $data = RentalBooking::with(['vehicle.model.manufacturer', 'vehicle.model.category', 'vehicle.properties', 'vehicle.features', 'vehicle.images'])->where('booking_id', $bookingId)->first();
+
+        if ($type == 'old') {
+            // Calculate for the OLD vehicle
+            // Period starts from previous change (or booking start) and ends at THIS change
+            $prevHistory = VehicleUpdateHistory::where('booking_id', $bookingId)
+                ->where('id', '<', $historyId)
+                ->orderBy('id', 'desc')
+                ->first();
+            $vehicleActiveStart = $prevHistory ? Carbon::parse($prevHistory->change_datetime) : Carbon::parse($data->pickup_date);
+            $vehicleActiveEnd = Carbon::parse($history->change_datetime);
+            $targetVehicle = $history->oldVehicle;
+        } else {
+            // Calculate for the NEW vehicle
+            // Period starts from THIS change and ends at next change (or booking end)
+            $vehicleActiveStart = Carbon::parse($history->change_datetime);
+            $nextHistory = VehicleUpdateHistory::where('booking_id', $bookingId)
+                ->where('id', '>', $historyId)
+                ->orderBy('id', 'asc')
+                ->first();
+            $vehicleActiveEnd = $nextHistory ? Carbon::parse($nextHistory->change_datetime) : Carbon::parse($data->end_datetime ?? $data->return_date);
+            $targetVehicle = $history->newVehicle;
+        }
+
+        // Override the vehicle for rendering logic
+        if ($targetVehicle) {
+            $data->setRelation('vehicle', $targetVehicle);
+        }
+
+        $companyDetails = CompanyDetail::select('id', 'address', 'phone', 'alt_phone', 'email', 'gst_no', 'pan_no', 'bank_name', 'bank_account_no', 'bank_ifsc_code')->first();
+
+        $newBooking = $extension = $completion = $cFees = $adminPenaltiesDue = $paidPenalties = [];
+        $totalAmt = $totalTax = $rateTotal = $amountDue = 0;
+        $gstStatus = 1;
+
+        $customerGst = DB::table('customers')->where('customer_id', $data->customer_id)->value('gst_number');
+        if ($customerGst != null) {
+            if (str_starts_with($customerGst, '24') == '') {
+                $gstStatus = 2;
+            }
+        }
+
+        $newBookingTimeStamp = '';
+        $calculationDetails = BookingTransaction::where(['booking_id' => $bookingId])->get();
+
+        if (is_countable($calculationDetails) && count($calculationDetails) > 0) {
+            foreach ($calculationDetails as $key => $value) {
+                $transStart = Carbon::parse($value->start_date ?? $value->timestamp);
+                $transEnd = Carbon::parse($value->end_date ?? $value->timestamp);
+
+                if ($value->type == 'new_booking' && (!$value->end_date || $transStart->equalTo($transEnd))) {
+                    $transStart = Carbon::parse($data->pickup_date);
+                    $transEnd = Carbon::parse($data->end_datetime ?? $data->return_date);
+                }
+
+                $overlapStart = $vehicleActiveStart->greaterThan($transStart) ? $vehicleActiveStart : $transStart;
+                $overlapEnd = $vehicleActiveEnd->lessThan($transEnd) ? $vehicleActiveEnd : $transEnd;
+
+                if ($overlapEnd->greaterThan($overlapStart)) {
+                    $overlapMinutes = $overlapStart->diffInMinutes($overlapEnd);
+                    $totalTransMinutes = $transStart->diffInMinutes($transEnd);
+                    $ratio = ($totalTransMinutes > 0) ? ($overlapMinutes / $totalTransMinutes) : 0;
+                    if ($ratio > 1)
+                        $ratio = 1;
+
+                    if ($value->type == 'new_booking' && $value->paid == 1) {
+                        $newBookingTimeStamp = $overlapStart->format('d-m-Y H:i') . ' - ' . $overlapEnd->format('d-m-Y H:i');
+                        $rate = ($value->trip_amount - $value->vehicle_commission_amount) * $ratio;
+                        $discount = $value->coupon_discount * $ratio;
+                        $newBooking['trip_amount'] = number_format($rate, 2);
+                        $newBooking['coupon_discount'] = number_format($discount, 2);
+                        $displayedAmount = $rate - $discount;
+                        $newBooking['total_amount'] = number_format($displayedAmount, 2);
+                        $totalAmt += $displayedAmount;
+                        $rateTotal += ($rate - $discount);
+                    } elseif ($value->type == 'extension' && $value->paid == 1) {
+                        $extension['timestamp'][] = $overlapEnd->format('d-m-Y H:i');
+                        $rate = ($value->trip_amount - $value->vehicle_commission_amount) * $ratio;
+                        $discount = $value->coupon_discount * $ratio;
+                        $extension['trip_amount'][] = number_format($rate, 2);
+                        $extension['coupon_discount'][] = number_format($discount, 2);
+                        $displayedAmount = $rate - $discount;
+                        $extension['total_amount'][] = number_format($displayedAmount, 2);
+                        $totalAmt += $displayedAmount;
+                        $rateTotal += ($rate - $discount);
+                    }
+                } elseif ($value->type == 'penalty' && $value->paid == 1) {
+                    $penaltyTime = Carbon::parse($value->timestamp);
+                    if ($penaltyTime->between($vehicleActiveStart, $vehicleActiveEnd)) {
+                        $paidPenalties['timestamp'][] = $penaltyTime->format('d-m-Y H:i');
+                        $rate = $value->total_amount;
+                        $paidPenalties['trip_amount'][] = number_format($rate, 2);
+                        $paidPenalties['coupon_discount'][] = number_format(0, 2);
+                        $displayedAmount = $rate + $value->tax_amt;
+                        $paidPenalties['total_amount'][] = number_format($displayedAmount, 2);
+                        $totalAmt += $displayedAmount;
+                        $rateTotal += $rate;
+                    }
+                } elseif ($value->type == 'completion' && $value->paid == 1) {
+                    if (!$nextHistory && $type == 'new') { // Completion charges only for the final vehicle in history
+                        $rate = (float) ($value->late_return ?? 0) + (float) ($value->exceeded_km_limit ?? 0) + (float) ($value->additional_charges ?? 0);
+                        if ($rate != 0) {
+                            $completion['trip_amount'][] = number_format($rate, 2);
+                            $displayedAmount = $rate + (float) ($value->tax_amt ?? 0);
+                            $completion['total_amount'][] = number_format($displayedAmount, 2);
+                            $completion['timestamp'][] = Carbon::parse($value->timestamp)->format('d-m-Y H:i');
+                            $totalAmt += $displayedAmount;
+                            $rateTotal += $rate;
+                        }
+                    }
+                }
+            }
+            $rateTotal = round($rateTotal, 2);
+            $totalAmt = round($totalAmt, 2);
+        }
+
+        $carHost = $targetVehicle->vehicleEligibility->carHost ?? null;
+        $is_history = true;
+        $history_type = $type;
+
+        $pdf = PDF::loadView('host-invoice', compact(
+            'history',
+            'data',
+            'companyDetails',
+            'carHost',
+            'newBooking',
+            'extension',
+            'completion',
+            'totalAmt',
+            'rateTotal',
+            'newBookingTimeStamp',
+            'gstStatus',
+            'amountDue',
+            'paidPenalties',
+            'is_history',
+            'history_type'
+        ))->setPaper('A3');
+
+        return $pdf->stream('vehicle-change-' . $type . '-invoice-' . $historyId . '.pdf');
     }
 
 }

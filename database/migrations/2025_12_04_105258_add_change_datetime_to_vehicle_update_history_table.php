@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('vehicle_update_history', function (Blueprint $table) {
-            $table->datetime('change_datetime')->nullable()->after('change_reason');
-        });
+        if (Schema::hasTable('vehicle_update_history') && !Schema::hasColumn('vehicle_update_history', 'change_datetime')) {
+            Schema::table('vehicle_update_history', function (Blueprint $table) {
+                $table->datetime('change_datetime')->nullable()->after('change_reason');
+            });
+        }
     }
 
     /**

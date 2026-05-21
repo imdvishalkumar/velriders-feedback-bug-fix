@@ -450,10 +450,18 @@ class VehicleInfoController extends Controller
         $startDate = '';
         $endDate = '';
         if (isset($bookingId) && !empty($bookingId)) {
-            $booking = RentalBooking::where('booking_id', $bookingId)->first();
+            $booking = RentalBooking::with('vehicle.model.category')->where('booking_id', $bookingId)->first();
             if ($booking) {
                 $startDate = $booking->pickup_date ? Carbon::parse($booking->pickup_date) : '';
                 $endDate = $booking->return_date ? Carbon::parse($booking->return_date) : '';
+
+                // Filter by same vehicle type if requested from booking history
+                if ($booking->vehicle && $booking->vehicle->model && $booking->vehicle->model->category) {
+                    $originalTypeId = $booking->vehicle->model->category->vehicle_type_id;
+                    $vehicles = $vehicles->where('vehicle_types.type_id', $originalTypeId);
+                }
+                // Exclude current vehicle from listing if changing
+                $vehicles = $vehicles->where('vehicles.vehicle_id', '!=', $booking->vehicle_id);
             }
         }
 
@@ -466,6 +474,7 @@ class VehicleInfoController extends Controller
                         //Check if particular vehicle is allocated with any booking then exclude that vehicle to show on list
                         if ($setting != '' && $setting->show_all_vehicle != 1) {
                             $existingBookings = RentalBooking::where('vehicle_id', $item->vehicle_id)
+                                ->where('booking_id', '!=', $bookingId)
                                 ->whereIn('status', ['running', 'confirmed'])
                                 ->where(function ($query) use ($startDate, $endDate) {
                                     $query->whereBetween('pickup_date', [$startDate, $endDate])

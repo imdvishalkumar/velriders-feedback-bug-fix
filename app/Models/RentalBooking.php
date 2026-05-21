@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Auth;
 // use function Termwind\style;
 use Illuminate\Support\Facades\DB;
 use Razorpay\Api\Api;
-use App\Models\{Payment, BookingTransaction, AdminPenalty, CustomerReferralDetails, RentalBooking, Setting, PaymentReportHistory};
+use App\Models\{Payment, BookingTransaction, AdminPenalty, CustomerReferralDetails, Setting, PaymentReportHistory, Branch, CarHostPickupLocation};
 use App\Jobs\SendNotificationJob;
 
 class RentalBooking extends Model
@@ -36,12 +36,16 @@ class RentalBooking extends Model
         // 'calculation_details',
         'start_otp',
         'end_otp',
+        'otp_verified_at',
         'start_kilometers',
         'end_datetime',
         // 'data_json',
         'tax_rate',
         'sequence_no',
         'is_end_by_admin',
+        'initial_vehicle_id',
+        'location_id',
+        'location_from',
         'created_at',
     ];
 
@@ -68,11 +72,40 @@ class RentalBooking extends Model
         'pending' => '#808080',
     ];
 
-    protected $appends = ['button_visiblity', 'status_map', 'start_images', 'end_images', 'invoice_pdf', 'admin_invoice_pdf', 'summary_pdf', 'admin_summary_pdf', 'message_map', 'dl_status', 'govtid_status', 'allow_rating', 'rating_value', 'feedback_value', 'pay_now_status', 'admin_penalty_amount', 'price_summary', 'admin_customer_aggrement'];
+    protected $appends = ['city_name', 'button_visiblity', 'status_map', 'start_images', 'end_images', 'invoice_pdf', 'admin_invoice_pdf', 'summary_pdf', 'admin_summary_pdf', 'message_map', 'dl_status', 'govtid_status', 'allow_rating', 'rating_value', 'feedback_value', 'pay_now_status', 'admin_penalty_amount', 'price_summary', 'admin_customer_aggrement', 'host_payment_date'];
+
+    public function getCityNameAttribute()
+    {
+        $cityName = '';
+        if ($this->location_from == 1) { // Branch
+            $branch = Branch::where('branch_id', $this->location_id)->first();
+            if ($branch && $branch->city) {
+                $cityName = $branch->city->name;
+            }
+        } else if ($this->location_from == 2) { // CarHostPickupLocation
+            $location = CarHostPickupLocation::where('id', $this->location_id)->with('city')->first();
+            if ($location && $location->city) {
+                $cityName = $location->city->name;
+            }
+        }
+
+        // Fallback to current vehicle city if not found (for old data where location_id might be null)
+        if ($cityName == '' && $this->vehicle) {
+            $cityName = $this->vehicle->city_name;
+        }
+
+        return $cityName;
+    }
 
     public function bookingTransactions()
     {
         return $this->hasMany(BookingTransaction::class, 'booking_id', 'booking_id');
+    }
+
+    public function assignedBy()
+    {
+        $adminPk = (new AdminUser)->getKeyName();
+        return $this->belongsTo(AdminUser::class, 'admin_id', $adminPk);
     }
 
     public function getStatusMapAttribute()
@@ -1046,17 +1079,17 @@ class RentalBooking extends Model
 
     public function getPayNowStatusAttribute()
     {
-        /*$completionFound = */
         $payNow = false;
 
-        // Check if there is a completion transaction that is not paid
-        /*$completionTransaction = BookingTransaction::where('booking_id', $this->booking_id)
+        // Check for unpaid completion transactions
+        $completionTransaction = BookingTransaction::where('booking_id', $this->booking_id)
             ->where('type', 'completion')
-            ->first();
-        if ($completionTransaction) {
-            $completionFound = true;
-            $isOrderPaid = $completionTransaction->paid;
-        }*/
+            ->where('paid', 0)
+            ->where(function ($query) {
+                $query->where('final_amount', '>', 0)
+                    ->orWhere('amount_to_pay', '>', 0);
+            })
+            ->exists();
 
         // Check if there is an unpaid admin penalty
         $adminPenalty = AdminPenalty::where('booking_id', $this->booking_id)
@@ -1064,17 +1097,21 @@ class RentalBooking extends Model
             ->where('is_paid', 0)
             ->exists();
 
-        $bookingTransaction = BookingTransaction::where('booking_id', $this->booking_id)
+        // Check for unpaid penalty transactions
+        $penaltyTransaction = BookingTransaction::where('booking_id', $this->booking_id)
             ->where('type', 'penalty')
             ->where('final_amount', '!=', 0)
             ->where('paid', 0)
             ->exists();
 
-        /*if ($completionFound) {
-            $payNow = !$isOrderPaid;
-        }*/
+        // Check for unpaid extension transactions
+        $extensionTransaction = BookingTransaction::where('booking_id', $this->booking_id)
+            ->where('type', 'extension')
+            ->where('final_amount', '!=', 0)
+            ->where('paid', 0)
+            ->exists();
 
-        if ($adminPenalty || $bookingTransaction) {
+        if ($completionTransaction || $adminPenalty || $penaltyTransaction || $extensionTransaction) {
             $payNow = true;
         }
 
@@ -1744,10 +1781,6 @@ class RentalBooking extends Model
         return $this->belongsTo(Customer::class, 'customer_id', 'customer_id');
     }
 
-    public function paymentReportHistory()
-    {
-        return $this->hasOne(PaymentReportHistory::class, 'booking_id', 'booking_id');
-    }
     public function generatePriceSummary($data)
     {
         // Extracting values from the $data array with default values
@@ -1945,5 +1978,15 @@ class RentalBooking extends Model
         } else {
             return 0;
         }
+    }
+
+    public function paymentReportHistory()
+    {
+        return $this->hasOne(PaymentReportHistory::class, 'booking_id', 'booking_id')->where('is_completed', true);
+    }
+
+    public function getHostPaymentDateAttribute()
+    {
+        return $this->paymentReportHistory && $this->paymentReportHistory->exported_at ? $this->paymentReportHistory->exported_at->format('d-m-Y') : null;
     }
 }

@@ -180,6 +180,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('add-booking', [AdminBookingController::class, 'addBooking']);
     Route::get('search-booking', [AdminBookingController::class, 'searchBooking']);
     Route::get('get-penalty-details', [AdminBookingController::class, 'getPenaltyDetails']);
+    Route::post('upload-booking-images', [AdminBookingController::class, 'uploadBookingImages']);
+    Route::post('delete-booking-image', [AdminBookingController::class, 'deleteBookingImage']);
+    Route::post('update-booking-image', [AdminBookingController::class, 'updateBookingImage']);
 
     // BOOKING PREVIEW
     Route::get('get-booking-preview-data', [AdminBookingController::class, 'getBookingPreviewData']);

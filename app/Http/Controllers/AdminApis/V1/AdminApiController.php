@@ -40,246 +40,276 @@ class AdminApiController extends Controller
 
     public function getDashboardDetails(Request $request)
     {
-        $currentDate = Carbon::now()->toDateString();
-        $validator = Validator::make($request->all(), [
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
-        ]);
-        if ($validator->fails()) {
-            return $this->validationErrorResponse($validator);
-        }
-
-        // Use default dates if not provided
-        $startDate = $request->start_date ? Carbon::parse($request->start_date)->startOfDay() : Carbon::today()->startOfDay();
-        $endDate = $request->end_date ? Carbon::parse($request->end_date)->endOfDay() : Carbon::today()->endOfDay();
-
-        $pageSize = $request->input('per_page', 5);
-        $perPage = $pageSize;
-
-        // Common Filters
-        $bookingId = $request->booking_id;
-        $vehicleId = $request->vehicle_id;
-        $modelId = $request->model_id;
-        $assignedBy = $request->assigned_by;
-
-        $applyFilters = function ($query) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
-            if ($bookingId) {
-                $query->where('booking_id', $bookingId);
+        try {
+            $currentDate = Carbon::now()->toDateString();
+            $validator = Validator::make($request->all(), [
+                'start_date' => 'nullable|date',
+                'end_date' => 'nullable|date',
+            ]);
+            if ($validator->fails()) {
+                return $this->validationErrorResponse($validator);
             }
-            if ($vehicleId) {
-                $query->where('vehicle_id', $vehicleId);
-            }
-            if ($modelId) {
-                $query->whereHas('vehicle.model', function ($q) use ($modelId) {
-                    $q->where('model_id', $modelId);
-                });
-            }
-            if ($assignedBy) {
-                if (\Schema::hasColumn('rental_bookings', 'admin_id')) {
-                    $query->where('admin_id', $assignedBy);
+
+            // Use default dates if not provided
+            $startDate = $request->start_date ? Carbon::parse($request->start_date)->startOfDay() : Carbon::today()->startOfDay();
+            $endDate = $request->end_date ? Carbon::parse($request->end_date)->endOfDay() : Carbon::today()->endOfDay();
+
+            $pageSize = $request->input('per_page', 5);
+            $perPage = $pageSize;
+
+            // Common Filters
+            $bookingId = $request->booking_id;
+            $vehicleId = $request->vehicle_id;
+            $modelId = $request->model_id;
+            $assignedBy = $request->assigned_by;
+
+            $applyFilters = function ($query) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
+                if ($bookingId) {
+                    $query->where('booking_id', $bookingId);
                 }
-            }
-            return $query;
-        };
+                if ($vehicleId) {
+                    $query->where('vehicle_id', $vehicleId);
+                }
+                if ($modelId) {
+                    $query->whereHas('vehicle.model', function ($q) use ($modelId) {
+                        $q->where('model_id', $modelId);
+                    });
+                }
+                if ($assignedBy) {
+                    if (\Schema::hasColumn('rental_bookings', 'admin_id')) {
+                        if (is_numeric($assignedBy)) {
+                            $query->where('admin_id', $assignedBy);
+                        } else {
+                            $query->whereHas('assignedBy', function ($sub) use ($assignedBy) {
+                                $sub->where('username', $assignedBy);
+                            });
+                        }
+                    }
+                }
+                return $query;
+            };
 
-        $applyPaymentFilters = function ($query) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
-            if ($bookingId || $vehicleId || $modelId || $assignedBy) {
-                $query->whereHas('booking', function ($q) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
-                    if ($bookingId) {
-                        $q->where('booking_id', $bookingId);
-                    }
-                    if ($vehicleId) {
-                        $q->where('vehicle_id', $vehicleId);
-                    }
-                    if ($modelId) {
-                        $q->whereHas('vehicle.model', function ($sub) use ($modelId) {
-                            $sub->where('model_id', $modelId);
-                        });
-                    }
-                    if ($assignedBy) {
-                        $q->where('admin_id', $assignedBy);
-                    }
+            $applyPaymentFilters = function ($query) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
+                if ($bookingId || $vehicleId || $modelId || $assignedBy) {
+                    $query->whereHas('booking', function ($q) use ($bookingId, $vehicleId, $modelId, $assignedBy) {
+                        if ($bookingId) {
+                            $q->where('booking_id', $bookingId);
+                        }
+                        if ($vehicleId) {
+                            $q->where('vehicle_id', $vehicleId);
+                        }
+                        if ($modelId) {
+                            $q->whereHas('vehicle.model', function ($sub) use ($modelId) {
+                                $sub->where('model_id', $modelId);
+                            });
+                        }
+                        if ($assignedBy) {
+                            if (\Schema::hasColumn('rental_bookings', 'admin_id')) {
+                                if (is_numeric($assignedBy)) {
+                                    $q->where('admin_id', $assignedBy);
+                                } else {
+                                    $q->whereHas('assignedBy', function ($sub) use ($assignedBy) {
+                                        $sub->where('username', $assignedBy);
+                                    });
+                                }
+                            }
+                        }
+                    });
+                }
+                return $query;
+            };
+
+            // --- Summary Counts ---
+            $todayCashEntry = Payment::where('payment_mode', 'cash')
+                ->where('status', 'captured')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $todayCashEntry = $applyPaymentFilters($todayCashEntry)->sum('amount');
+
+            $cancelBookingCount = AdminRentalBooking::where('status', 'canceled')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $cancelBookingCount = $applyFilters($cancelBookingCount)->count();
+
+            $runningBookingCount = AdminRentalBooking::where('status', 'running')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $runningBookingCount = $applyFilters($runningBookingCount)->count();
+
+            $returnDueBookingCount = AdminRentalBooking::where('status', 'running')
+                ->whereDate('return_date', '<', $currentDate)
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $returnDueBookingCount = $applyFilters($returnDueBookingCount)->count();
+
+            $pendingPaymentCount = Payment::where('status', 'pending')
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereHas('booking', function ($query) {
+                    $query->whereNotIn('status', ['completed', 'canceled', 'failed', 'refunded', 'no show']);
                 });
-            }
-            return $query;
-        };
+            $pendingPaymentCount = $applyPaymentFilters($pendingPaymentCount)->count();
 
-        // --- Summary Counts ---
-        $todayCashEntry = Payment::where('payment_mode', 'cash')
-            ->where('status', 'captured')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $todayCashEntry = $applyPaymentFilters($todayCashEntry)->sum('amount');
+            $adminBookingCount = AdminRentalBooking::whereBetween('created_at', [$startDate, $endDate])
+                ->whereHas('payments', function ($query) {
+                    $query->where('razorpay_order_id', 'admin_booking');
+                });
+            $adminBookingCount = $applyFilters($adminBookingCount)->count();
 
-        $cancelBookingCount = AdminRentalBooking::where('status', 'canceled')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $cancelBookingCount = $applyFilters($cancelBookingCount)->count();
+            $customerBookingCount = AdminRentalBooking::whereBetween('created_at', [$startDate, $endDate])
+                ->whereHas('payments', function ($query) {
+                    $query->where('razorpay_order_id', '!=', 'admin_booking');
+                });
+            $customerBookingCount = $applyFilters($customerBookingCount)->count();
 
-        $runningBookingCount = AdminRentalBooking::where('status', 'running')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $runningBookingCount = $applyFilters($runningBookingCount)->count();
+            // --- Paginated Details ---
 
-        $returnDueBookingCount = AdminRentalBooking::where('status', 'running')
-            ->whereDate('return_date', '<', $currentDate)
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $returnDueBookingCount = $applyFilters($returnDueBookingCount)->count();
+            // 1. Cash Entry Details
+            $paymentDetailsQuery = Payment::with(['booking.customer', 'booking.vehicle.model.category.vehicleType'])
+                ->where('payment_mode', 'cash')
+                ->where('status', 'captured')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $paymentDetails = $applyPaymentFilters($paymentDetailsQuery)
+                ->paginate($perPage, ['*'], 'page', $request->page ?? 1);
 
-        $pendingPaymentCount = Payment::where('status', 'pending')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $pendingPaymentCount = $applyPaymentFilters($pendingPaymentCount)->count();
-
-        $adminBookingCount = AdminRentalBooking::whereBetween('created_at', [$startDate, $endDate])
-            ->whereHas('payments', function ($query) {
-                $query->where('razorpay_order_id', 'admin_booking');
+            $paymentDetails->getCollection()->each(function ($item) {
+                if ($item->booking && $item->booking->vehicle) {
+                    $item->booking->km_limit = calculateKmLimit($item->booking->rental_duration_minutes / 60, $item->booking->vehicle?->model?->category?->vehicleType?->name ?? null);
+                    $item->booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+                }
             });
-        $adminBookingCount = $applyFilters($adminBookingCount)->count();
 
-        $customerBookingCount = AdminRentalBooking::whereBetween('created_at', [$startDate, $endDate])
-            ->whereHas('payments', function ($query) {
-                $query->where('razorpay_order_id', '!=', 'admin_booking');
-            });
-        $customerBookingCount = $applyFilters($customerBookingCount)->count();
+            // 2. Running Bookings
+            $runningBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+                ->where('status', 'running')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $runningBookingDetails = $applyFilters($runningBookingDetailsQuery)
+                ->paginate($perPage, ['*'], 'running_page', $request->running_page ?? 1);
 
-        // --- Paginated Details ---
-
-        // 1. Cash Entry Details
-        $paymentDetailsQuery = Payment::with(['booking.customer', 'booking.vehicle.model.category.vehicleType'])
-            ->where('payment_mode', 'cash')
-            ->where('status', 'captured')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $paymentDetails = $applyPaymentFilters($paymentDetailsQuery)
-            ->paginate($perPage, ['*'], 'page', $request->page ?? 1);
-
-        $paymentDetails->getCollection()->each(function ($item) {
-            if ($item->booking && $item->booking->vehicle) {
-                $item->booking->km_limit = calculateKmLimit($item->booking->rental_duration_minutes / 60, $item->booking->vehicle->model->category->vehicleType->name ?? null);
-                $item->booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
-            }
-        });
-
-        // 2. Running Bookings
-        $runningBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
-            ->where('status', 'running')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $runningBookingDetails = $applyFilters($runningBookingDetailsQuery)
-            ->paginate($perPage, ['*'], 'running_page', $request->running_page ?? 1);
-
-        $runningBookingDetails->getCollection()->transform(function ($booking) {
-            $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle->model->category->vehicleType->name ?? null);
-            if ($booking->vehicle) {
-                $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
-            }
-            return $booking;
-        });
-
-        // 3. Return Due Bookings
-        $returnBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
-            ->where('status', 'running')
-            ->whereDate('return_date', '<', $currentDate)
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $returnBookingDetails = $applyFilters($returnBookingDetailsQuery)
-            ->paginate($perPage, ['*'], 'return_page', $request->return_page ?? 1);
-
-        $returnBookingDetails->getCollection()->transform(function ($booking) {
-            $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle->model->category->vehicleType->name ?? null);
-            $booking->penalty_sum = $booking->adminPenalties()->sum('amount');
-            if ($booking->vehicle) {
-                $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
-            }
-            return $booking;
-        });
-
-        // 4. Canceled Bookings
-        $canceledBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType', 'cancellation'])
-            ->where('status', 'canceled')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $canceledBookingDetails = $applyFilters($canceledBookingDetailsQuery)
-            ->paginate($perPage, ['*'], 'canceled_page', $request->canceled_page ?? 1);
-
-        $canceledBookingDetails->getCollection()->each(function ($item) {
-            $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle->model->category->vehicleType->name ?? null);
-            $item->cancelled_by = $item->cancellation->cancelledBy->username ?? $item->cancellation->data_json['cancelled_by_name'] ?? 'N/A';
-            $item->cancel_reason = $item->cancellation->cancel_reason ?? $item->cancellation->data_json['cancel_reason'] ?? 'N/A';
-            if ($item->vehicle) {
-                $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
-            }
-        });
-
-        // 5. Pending Payments
-        $pendingPaymentDetailsQuery = Payment::with(['booking.customer', 'booking.vehicle.model.category.vehicleType'])
-            ->where('status', 'pending')
-            ->whereBetween('created_at', [$startDate, $endDate]);
-        $pendingPayments = $applyPaymentFilters($pendingPaymentDetailsQuery)
-            ->paginate($perPage, ['*'], 'pending_page', $request->pending_page ?? 1);
-
-        // Transform Pending Payments to match Booking structure for frontend
-        $pendingPaymentData = $pendingPayments->getCollection()->map(function ($payment) {
-            $booking = $payment->booking;
-            if ($booking) {
-                $booking->pending_amount = $payment->amount;
-                // Add km_limit for consistency
+            $runningBookingDetails->getCollection()->transform(function ($booking) {
+                $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle?->model?->category?->vehicleType?->name ?? null);
                 if ($booking->vehicle) {
-                    $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle->model->category->vehicleType->name ?? null);
                     $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
                 }
-            }
-            return $booking;
-        })->filter();
-
-        // Since we need to maintain pagination metadata, we wrap it back
-        $pendingPaymentDetails = $pendingPayments;
-        $pendingPaymentDetails->setCollection($pendingPaymentData);
-
-        // 6. Admin Bookings
-        $adminBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->whereHas('payments', function ($query) {
-                $query->where('razorpay_order_id', 'admin_booking');
+                return $booking;
             });
-        $adminBookingDetails = $applyFilters($adminBookingDetailsQuery)
-            ->paginate($perPage, ['*'], 'admin_page', $request->admin_page ?? 1);
 
-        $adminBookingDetails->getCollection()->each(function ($item) {
-            $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle->model->category->vehicleType->name ?? null);
-            if ($item->vehicle) {
-                $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
-            }
-        });
+            // 3. Return Due Bookings
+            $returnBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+                ->where('status', 'running')
+                ->whereDate('return_date', '<', $currentDate)
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $returnBookingDetails = $applyFilters($returnBookingDetailsQuery)
+                ->paginate($perPage, ['*'], 'return_page', $request->return_page ?? 1);
 
-        // 7. Customer Bookings
-        $customerBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->whereHas('payments', function ($query) {
-                $query->where('razorpay_order_id', '!=', 'admin_booking');
+            $returnBookingDetails->getCollection()->transform(function ($booking) {
+                $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle?->model?->category?->vehicleType?->name ?? null);
+                $booking->penalty_sum = $booking->adminPenalties()->sum('amount');
+                if ($booking->vehicle) {
+                    $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+                }
+                return $booking;
             });
-        $customerBookingDetails = $applyFilters($customerBookingDetailsQuery)
-            ->paginate($perPage, ['*'], 'customer_page', $request->customer_page ?? 1);
 
-        $customerBookingDetails->getCollection()->each(function ($item) {
-            $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle->model->category->vehicleType->name ?? null);
-            if ($item->vehicle) {
-                $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
-            }
-        });
+            // 4. Canceled Bookings
+            $canceledBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType', 'cancellation'])
+                ->where('status', 'canceled')
+                ->whereBetween('created_at', [$startDate, $endDate]);
+            $canceledBookingDetails = $applyFilters($canceledBookingDetailsQuery)
+                ->paginate($perPage, ['*'], 'canceled_page', $request->canceled_page ?? 1);
 
-        $detailArr = [
-            'cash_entry_sum' => (float) $todayCashEntry,
-            'canceled_booking_count' => $cancelBookingCount,
-            'running_booking_count' => $runningBookingCount,
-            'return_due_booking_count' => $returnDueBookingCount,
-            'pending_payment_count' => $pendingPaymentCount,
-            'admin_booking_count' => $adminBookingCount,
-            'customer_booking_count' => $customerBookingCount,
+            $canceledBookingDetails->getCollection()->each(function ($item) {
+                $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle?->model?->category?->vehicleType?->name ?? null);
+                $item->cancelled_by = $item->cancellation?->cancelledBy?->username ?? $item->cancellation?->data_json['cancelled_by_name'] ?? 'N/A';
+                $item->cancel_reason = $item->cancellation?->cancel_reason ?? $item->cancellation?->data_json['cancel_reason'] ?? 'N/A';
+                if ($item->vehicle) {
+                    $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+                }
+            });
 
-            'payment_details' => $paymentDetails,
-            'canceled_booking_details' => $canceledBookingDetails,
-            'running_booking_details' => $runningBookingDetails,
-            'return_due_booking_details' => $returnBookingDetails,
-            'pending_payment_details' => $pendingPaymentDetails,
-            'admin_booking_details' => $adminBookingDetails,
-            'customer_booking_details' => $customerBookingDetails,
-        ];
+            // 5. Pending Payments
+            $pendingPaymentDetailsQuery = Payment::with(['booking.customer', 'booking.vehicle.model.category.vehicleType'])
+                ->where('status', 'pending')
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereHas('booking', function ($query) {
+                    $query->whereNotIn('status', ['completed', 'canceled', 'failed', 'refunded', 'no show']);
+                });
+            $pendingPayments = $applyPaymentFilters($pendingPaymentDetailsQuery)
+                ->paginate($perPage, ['*'], 'pending_page', $request->pending_page ?? 1);
 
-        return $this->successResponse($detailArr, 'Details retrieved successfully');
+            // Transform Pending Payments to match Booking structure for frontend
+            $pendingPaymentData = $pendingPayments->getCollection()->map(function ($payment) {
+                $booking = $payment->booking;
+                if ($booking) {
+                    $booking->pending_amount = $payment->amount;
+                    // Add km_limit for consistency
+                    if ($booking->vehicle) {
+                        $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle?->model?->category?->vehicleType?->name ?? null);
+                        $booking->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+                    }
+                }
+                return $booking;
+            })->filter();
+
+            // Since we need to maintain pagination metadata, we wrap it back
+            $pendingPaymentDetails = $pendingPayments;
+            $pendingPaymentDetails->setCollection($pendingPaymentData);
+
+            // 6. Admin Bookings
+            $adminBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereHas('payments', function ($query) {
+                    $query->where('razorpay_order_id', 'admin_booking');
+                });
+            $adminBookingDetails = $applyFilters($adminBookingDetailsQuery)
+                ->paginate($perPage, ['*'], 'admin_page', $request->admin_page ?? 1);
+
+            $adminBookingDetails->getCollection()->each(function ($item) {
+                $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle?->model?->category?->vehicleType?->name ?? null);
+                if ($item->vehicle) {
+                    $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+                }
+            });
+
+            // 7. Customer Bookings
+            $customerBookingDetailsQuery = AdminRentalBooking::with(['customer', 'vehicle.model.category.vehicleType'])
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereHas('payments', function ($query) {
+                    $query->where('razorpay_order_id', '!=', 'admin_booking');
+                });
+            $customerBookingDetails = $applyFilters($customerBookingDetailsQuery)
+                ->paginate($perPage, ['*'], 'customer_page', $request->customer_page ?? 1);
+
+            $customerBookingDetails->getCollection()->each(function ($item) {
+                $item->km_limit = calculateKmLimit($item->rental_duration_minutes / 60, $item->vehicle?->model?->category?->vehicleType?->name ?? null);
+                if ($item->vehicle) {
+                    $item->vehicle->makeHidden(['branch_id', 'rental_price', 'extra_km_rate', 'extra_hour_rate', 'availability_calendar', 'commission_percent', 'publish', 'chassis_no']);
+                }
+            });
+
+            $detailArr = [
+                'cash_entry_sum' => (float) $todayCashEntry,
+                'canceled_booking_count' => $cancelBookingCount,
+                'running_booking_count' => $runningBookingCount,
+                'return_due_booking_count' => $returnDueBookingCount,
+                'pending_payment_count' => $pendingPaymentCount,
+                'admin_booking_count' => $adminBookingCount,
+                'customer_booking_count' => $customerBookingCount,
+
+                'payment_details' => $paymentDetails,
+                'canceled_booking_details' => $canceledBookingDetails,
+                'running_booking_details' => $runningBookingDetails,
+                'return_due_booking_details' => $returnBookingDetails,
+                'pending_payment_details' => $pendingPaymentDetails,
+                'admin_booking_details' => $adminBookingDetails,
+                'customer_booking_details' => $customerBookingDetails,
+            ];
+
+            return $this->successResponse($detailArr, 'Details retrieved successfully');
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ], 500);
+        }
     }
 
     public function getAllRoles(Request $request)

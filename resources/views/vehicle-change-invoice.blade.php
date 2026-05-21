@@ -69,70 +69,53 @@ body {
                 @endif
             </td>
             <td style="text-align: right; vertical-align: top;">
-                <h3 style="margin: 0; padding-top: 10px;">SHAILESH CAR & BIKE PVT LTD</h3>
-                <p style="font-size: 11px; margin: 5px 0; line-height: 1.4;">
-                    {{$companyAdd}}<br/>
-                    {{$companyPhone}}@if($companyAltPhone), {{$companyAltPhone}}@endif<br/>
-                    {{$companyEmail}}
-                </p>
+                <h4 style="line-height: 0px; margin-bottom: 0px; margin-top: 15px;">SHAILESH CAR & BIKE PVT LTD</h4>
+                <h6 style="line-height: 15px; margin-bottom: 5px;">{{$companyAdd}}<br/>{{$companyPhone}}, {{$companyAltPhone}}, {{$companyEmail}}</h6>
             </td>
         </tr>
     </table>
 
     <table class="column-bordered-table" align="center" style="width: 85.5% !important; margin-top: 10px;">
         <tr>
-            <td rowspan="2" style="text-align: left; vertical-align: top; width: 45%; padding: 10px;">
-                <h4 style="margin: 0 0 10px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px;">CarHost Details</h4>
+            <td rowspan="2" style="text-align: left; vertical-align: top; width: 45%; padding: 5px;">
+                <h4 style="margin: 5px;">CarHost Details</h4>
                 @php 
                     $hostName = '';
                     if(isset($carHost->firstname)) $hostName = $carHost->firstname;
                     if(isset($carHost->lastname)) $hostName .= ' '.$carHost->lastname;
                 @endphp
-                <div style="font-size: 13px;">
+                <h5 style="margin: 4px; font-weight: normal;">
+                    @if(isset($carHost->gst_number) && $carHost->gst_number != '')
+                        <span style="font-weight: bold; font-size: 13px;">GST No. - {{$carHost->gst_number}}</span><br/>
+                    @endif
                     @if(isset($carHost->business_name) && $carHost->business_name != '')
-                        <div style="font-weight: bold; margin-bottom: 5px;">{{$carHost->business_name}}</div>
+                        <span style="font-weight: bold; font-size: 13px;">Business Name - {{$carHost->business_name}}</span><br/>
                     @endif
-                    <div style="font-weight: bold; margin-bottom: 5px; font-size: 14px;">{{$hostName}}</div>
-                    <div style="margin-bottom: 3px;">{{$carHost->mobile_number ?? ''}}</div>
-                    <div style="margin-bottom: 5px;">{{$carHost->email ?? ''}}</div>
-                    @if(isset($carHost->billing_address))
-                        <div style="font-size: 11px; color: #555;">{{$carHost->billing_address}}</div>
-                    @endif
-                </div>
+                    <h3 style="margin: 5px 0;">{{$hostName}}</h3>
+                    <h4 style="margin: 2px 0;">
+                        {{$carHost->mobile_number ?? ''}}<br/>
+                        {{$carHost->email ?? ''}}
+                    </h4>
+                </h5>
             </td>
-            <td style="background-color: #f9f9f9; padding: 5px 10px;"><h4 style="margin: 0;">Tax Invoice</h4></td>
+            <td><h4 style="margin: 2px;">Tax Invoice</h4></td>
         </tr>
         <tr>
-            <td style="padding: 10px; vertical-align: top;">
-                <table width="100%" style="font-size: 12px; border-collapse: collapse;">
-                    <tr>
-                        <td style="padding: 2px 0;"><b>Invoice No. :</b> VR-{{ $history->id }}</td>
-                        <td style="text-align: right; padding: 2px 0;"><b>Date :</b> {{ date('d-m-Y', strtotime($history->created_at)) }}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="padding: 2px 0;"><b>Booking ID :</b> {{ $history->booking_id }}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="padding: 8px 0 2px 0; border-top: 1px dashed #ccc;">
-                            <b>Pickup:</b> {{ date('d-m-Y H:i', strtotime($data->pickup_date)) }}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="padding: 2px 0;">
-                            <b>Return:</b> {{ date('d-m-Y H:i', strtotime($data->end_datetime ?? $data->return_date)) }}
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="padding: 8px 0 2px 0; border-top: 1px dashed #ccc;">
-                            <b>Vehicle:</b> {{ $history->newVehicle->vehicle_name ?? 'N/A' }} ({{ $history->newVehicle->model->category->name ?? '' }})
-                        </td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="padding: 2px 0;">
-                            <b>Registration Number:</b> {{ $history->newVehicle->license_plate ?? 'N/A' }}
-                        </td>
-                    </tr>
-                </table>
+            <td style="padding: 5px; vertical-align: top;">
+                <h5 style="margin: 4px 0;">
+                    <b>Invoice No. :</b> VR-{{ $history->id }}
+                    <span style="margin-left: 20px;"><b>Booking ID :</b> {{ $history->booking_id }}</span>
+                    <span style="margin-left: 40px;"><b>Date :</b> {{ date('d-m-Y', strtotime($history->created_at)) }}</span>
+                </h5>
+                <h5 style="margin: 8px 0;">
+                    <b>Pickup Date -</b> {{ date('d-m-Y H:i', strtotime($data->pickup_date)) }} | <b>Return Date -</b> {{ date('d-m-Y H:i', strtotime($data->end_datetime ?? $data->return_date)) }}
+                </h5>
+                <h5 style="margin: 4px 0;">
+                    <b>Vehicle -</b> {{ $history->newVehicle->vehicle_name ?? 'N/A' }} ({{ $history->newVehicle->model->category->name ?? '' }})
+                </h5>
+                <h5 style="margin: 4px 0;">
+                    <b>Registration Number:</b> {{ $history->newVehicle->license_plate ?? 'N/A' }}
+                </h5>
             </td>
         </tr>
     </table>
@@ -140,36 +123,36 @@ body {
     <table class="column-bordered-table" cellpadding="0" cellspacing="0" align="center" style="width: 85.5% !important; margin-top: 10px;">
         <thead>
             <tr style="background-color: #f2f2f2;">
-                <th style="padding: 8px; text-align: left;">Particular</th>
-                <th style="padding: 8px; width: 60px;">Qty.</th>
-                <th style="padding: 8px; width: 80px;">Rate</th>
-                <th style="padding: 8px; width: 80px;">Discount</th>
-                <th style="padding: 8px; width: 100px;">Amount</th>
+                <th style="padding: 5px; text-align: left; border: 2px solid #000;">Particular</th>
+                <th style="padding: 5px; width: 60px; border: 2px solid #000;">Qty.</th>
+                <th style="padding: 5px; width: 80px; border: 2px solid #000;">Rate</th>
+                <th style="padding: 5px; width: 80px; border: 2px solid #000;">Discount</th>
+                <th style="padding: 5px; width: 100px; border: 2px solid #000;">Amount</th>
             </tr>
         </thead>
         <tbody>
             @if(isset($newBooking) && !empty($newBooking))
                 <tr>
-                    <td style="padding: 8px; font-size: 13px;">
-                        <b>Booking</b> | {{$newBookingTimeStamp}}
+                    <td style="padding: 5px; border-right: 1px solid #000;">
+                        <h5 style="margin: 5px; font-weight: normal;"><b>Booking</b> | {{$newBookingTimeStamp}}</h5>
                     </td>
-                    <td style="padding: 8px; text-align: center; font-size: 13px;">1.00</td>
-                    <td style="padding: 8px; text-align: right; font-size: 13px;">{{$newBooking['trip_amount'] ?? '0.00'}}</td>
-                    <td style="padding: 8px; text-align: right; font-size: 13px;">{{$newBooking['coupon_discount'] ?? '0.00'}}</td>
-                    <td style="padding: 8px; text-align: right; font-size: 13px;">{{$newBooking['total_amount'] ?? '0.00'}}</td>
+                    <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">1.00</h5></td>
+                    <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$newBooking['trip_amount'], 2)}}</h5></td>
+                    <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$newBooking['coupon_discount'], 2)}}</h5></td>
+                    <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$newBooking['total_amount'], 2)}}</h5></td>
                 </tr>
             @endif
 
             @if(isset($extension) && !empty($extension['trip_amount']))
                 @foreach($extension['trip_amount'] as $i => $amt)
                     <tr>
-                        <td style="padding: 8px; font-size: 13px;">
-                            <b>Extension</b> | {{ $extension['timestamp'][$i] ?? '' }}
+                        <td style="padding: 5px; border-right: 1px solid #000;">
+                            <h5 style="margin: 5px; font-weight: normal;"><b>Extension</b> | {{ $extension['timestamp'][$i] ?? '' }}</h5>
                         </td>
-                        <td style="padding: 8px; text-align: center; font-size: 13px;">1.00</td>
-                        <td style="padding: 8px; text-align: right; font-size: 13px;">{{$amt}}</td>
-                        <td style="padding: 8px; text-align: right; font-size: 13px;">{{$extension['coupon_discount'][$i] ?? '0.00'}}</td>
-                        <td style="padding: 8px; text-align: right; font-size: 13px;">{{$extension['total_amount'][$i] ?? '0.00'}}</td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">1.00</h5></td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$amt, 2)}}</h5></td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$extension['coupon_discount'][$i], 2)}}</h5></td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$extension['total_amount'][$i], 2)}}</h5></td>
                     </tr>
                 @endforeach
             @endif
@@ -177,76 +160,88 @@ body {
             @if(isset($paidPenalties) && !empty($paidPenalties['trip_amount']))
                 @foreach($paidPenalties['trip_amount'] as $i => $amt)
                     <tr>
-                        <td style="padding: 8px; font-size: 13px;">
-                            <b>Penalty/Adjustment</b> | {{ $paidPenalties['timestamp'][$i] ?? '' }}
+                        <td style="padding: 5px; border-right: 1px solid #000;">
+                            <h5 style="margin: 5px; font-weight: normal;"><b>Penalty/Adjustment</b> | {{ $paidPenalties['timestamp'][$i] ?? '' }}</h5>
                         </td>
-                        <td style="padding: 8px; text-align: center; font-size: 13px;">1.00</td>
-                        <td style="padding: 8px; text-align: right; font-size: 13px;">{{$amt}}</td>
-                        <td style="padding: 8px; text-align: right; font-size: 13px;">{{$paidPenalties['coupon_discount'][$i] ?? '0.00'}}</td>
-                        <td style="padding: 8px; text-align: right; font-size: 13px;">{{$paidPenalties['total_amount'][$i] ?? '0.00'}}</td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">1.00</h5></td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$amt, 2)}}</h5></td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$paidPenalties['coupon_discount'][$i], 2)}}</h5></td>
+                        <td style="padding: 5px; text-align: right; border-right: 1px solid #000;"><h5 style="margin: 5px; font-weight: normal;">{{number_format((float)$paidPenalties['total_amount'][$i], 2)}}</h5></td>
                     </tr>
                 @endforeach
             @endif
 
-            <tr>
-                <td style="padding: 8px; font-size: 12px; color: #444;">
-                    <div style="font-weight: bold; margin-bottom: 2px;">Vehicle Amendment</div>
-                    <div>Changed to {{ $history->newVehicle->vehicle_name ?? '' }} ({{ $history->newVehicle->license_plate ?? 'N/A' }})</div>
-                    <div style="font-style: italic; margin-top: 3px;">Reason: {{ $history->change_reason }}</div>
+            <tr style="border-top: 2px solid #000;">
+                <td style="padding: 5px; border-right: 1px solid #000;">
+                    <h5 style="margin: 5px; font-weight: normal;">
+                        <b>Vehicle Amendment</b><br/>
+                        Changed to {{ $history->newVehicle->vehicle_name ?? '' }} ({{ $history->newVehicle->license_plate ?? 'N/A' }})<br/>
+                        <span style="font-style: italic;">Reason: {{ $history->change_reason }}</span>
+                    </h5>
                 </td>
-                <td style="padding: 8px; text-align: center;">-</td>
-                <td style="padding: 8px; text-align: center;">-</td>
-                <td style="padding: 8px; text-align: center;">-</td>
-                <td style="padding: 8px; text-align: center;">-</td>
+                <td style="padding: 5px; text-align: center; border-right: 1px solid #000;">-</td>
+                <td style="padding: 5px; text-align: center; border-right: 1px solid #000;">-</td>
+                <td style="padding: 5px; text-align: center; border-right: 1px solid #000;">-</td>
+                <td style="padding: 5px; text-align: center; border-right: 1px solid #000;">-</td>
             </tr>
         </tbody>
     </table>
     
-    <table class="column-bordered-table" align="center" style="width: 85.5% !important;">
+    <table class="column-bordered-table" cellpadding="0" cellspacing="0" style="width: 85.5% !important;" align="center">
         <tr>
-            <td style="width: 60%; padding: 10px; border-right: none;">
-                <div style="font-size: 11px; margin-bottom: 5px;"><b>Amount in words:</b></div>
-                @php
-                    $grandTotal = ($totalAmt ?? 0) + ($amountDue ?? 0);
-                    $amountInWords = $grandTotal > 0 ? getIndianCurrency((float)$grandTotal) : '';
-                @endphp
-                <div style="font-size: 12px; font-weight: bold; text-transform: uppercase;">{{$amountInWords}} ONLY</div>
-                
-                <div style="margin-top: 15px; font-size: 11px;">
-                    <b>GST No :</b> {{$companyGst}} | <b>PAN No :</b> {{$companyPan}}
-                </div>
+            <td style="vertical-align: top; padding: 5px;">
+                <h5 style="margin: 5px;"><b>Amount in words</b> : 
+                    <span style="font-weight: normal;">
+                        @php
+                            $grandTotal = ($totalAmt ?? 0) + ($amountDue ?? 0);
+                            $amountInWords = $grandTotal > 0 ? getIndianCurrency((float)$grandTotal) : '';
+                        @endphp
+                        {{ ucwords($amountInWords) }}
+                    </span>
+                </h5>
             </td>
-            <td style="padding: 0; border-left: none;">
-                <table width="100%" cellpadding="5" style="border-collapse: collapse; font-size: 13px;">
-                    <tr>
-                        <td style="border-bottom: 1px solid #ccc;">Total Rate</td>
-                        <td style="text-align: right; border-bottom: 1px solid #ccc; font-weight: bold;">{{number_format($rateTotal, 2)}}</td>
-                    </tr>
-                    <tr style="background-color: #f2f2f2;">
-                        <td style="border-bottom: 1px solid #000;"><b>Grand Total</b></td>
-                        <td style="text-align: right; border-bottom: 1px solid #000; font-weight: bold;">{{number_format($grandTotal, 2)}}</td>
-                    </tr>
-                    <tr>
-                        <td style="color: green; border-top: 1px solid #000;">Amount Paid</td>
-                        <td style="text-align: right; font-weight: bold; color: green; border-top: 1px solid #000;">{{number_format($totalAmt, 2)}}</td>
-                    </tr>
-                </table>
+            <td style="border: 0px solid #000; width: 120px; padding: 5px;">
+                <h5 style="line-height: 12px; margin: 5px 0;"><b>Total Rate</b></h5>
+                <h5 style="line-height: 12px; margin: 15px 0 5px 0;"><b>Grand Total</b></h5>
+            </td>
+            <td style="border: 0px solid #000; width: 100px; padding: 5px; text-align: right;">
+                <h5 style="line-height: 12px; margin: 5px 0;"><b>{{number_format($rateTotal, 2)}}</b></h5>
+                <h5 style="line-height: 12px; margin: 15px 0 5px 0;"><b>{{number_format($grandTotal, 2)}}</b></h5>
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 5px;">
+                <h5 style="margin: 5px;">
+                    <b>GSTNo</b> : {{$companyGst}} <b style="margin-left: 35px;">PAN No.</b> : {{$companyPan}}
+                </h5>
+            </td>
+            <td style="text-align: left; padding: 15px; border-right: 0px solid #000; background-color: #f9f9f9;">
+                <h5 style="margin: 0; color: #333;">Amount Paid</h5>
+                @if(isset($amountDue) && $amountDue > 0)
+                    <h5 style="margin: 10px 0 0 0;"><b>Amount Due</b></h5>
+                @endif
+            </td>
+            <td style="text-align: right; padding: 15px; border-left: 0px solid #000; background-color: #f9f9f9;">
+                <h5 style="margin: 0;">{{number_format($totalAmt, 2)}}</h5>
+                @if(isset($amountDue) && $amountDue > 0)
+                    <h5 style="margin: 10px 0 0 0;">{{number_format($amountDue, 2)}}</h5>
+                @endif
             </td>
         </tr>
     </table>
 
-    <table align="center" style="width: 85.5%; margin-top: 30px;">
+    <table align="center" style="width: 85.5%; margin-top: 30px; border-collapse: collapse;">
         <tr>
-            <td style="width: 60%;"></td>
-            <td style="text-align: center; border: 1px solid #eee; padding: 20px;">
-                <div style="font-size: 12px; margin-bottom: 40px;">For, <b>SHAILESH CAR & BIKE PVT LTD</b></div>
-                <div style="font-size: 12px; font-weight: bold; border-top: 1px solid #ccc; padding-top: 5px;">AUTHORISED SIGNATORY</div>
+            <td style="width: 55%;"></td>
+            <td style="text-align: center; border: 1px solid #000; padding: 15px;">
+                <h5 style="font-weight: normal; margin: 0 0 30px 0;">For, SHAILESH CAR & BIKE PVT LTD</h5>
+                <h5 style="font-weight: bold; margin: 0; border-top: 1px solid #ccc; padding-top: 5px;">AUTHORISED SIGNATORY</h5>
             </td>
         </tr>
     </table>
 
     <div style="text-align: center; margin-top: 40px; font-size: 12px; color: #666; width: 100%;">
-        Thank you for choosing <b>VELRIDERS</b>.
+        Thank you for choosing VELRIDERS.
     </div>
 </body>
 </html>
