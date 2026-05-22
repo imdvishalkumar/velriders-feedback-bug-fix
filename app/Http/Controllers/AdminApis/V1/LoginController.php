@@ -152,7 +152,7 @@ class LoginController extends Controller
 
         // Generate PDF
         $filename = 'booking-invoice-' . $bookingId . '.pdf';
-        $pdf = PDF::loadView('host-invoice', compact(
+        $pdf = PDF::loadView('booking-invoice', compact(
             'data',
             'companyDetails',
             'carHost',
@@ -2094,6 +2094,10 @@ class LoginController extends Controller
 
         $bookingId = $history->booking_id;
         $data = RentalBooking::with(['vehicle.model.manufacturer', 'vehicle.model.category', 'vehicle.properties', 'vehicle.features', 'vehicle.images'])->where('booking_id', $bookingId)->first();
+
+        // Referenced later for completion charges; the 'old' branch never sets it,
+        // so default it here to avoid an undefined-variable error.
+        $nextHistory = null;
 
         if ($type == 'old') {
             // Calculate for the OLD vehicle

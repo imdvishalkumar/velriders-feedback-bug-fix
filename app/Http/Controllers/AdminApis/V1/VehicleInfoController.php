@@ -1739,6 +1739,17 @@ class VehicleInfoController extends Controller
                     $multipliers[$key][$value] = round($multiplierVal, 2);
                 }
 
+                // [RENTAL PRICE DEBUG] log incoming request values + the derived rental price
+                \Log::info('[RENTAL PRICE DEBUG] price_calculation incoming', [
+                    'vehicle_id'              => $vehicle->vehicle_id,
+                    'request_rental_price'    => $request->rental_price,
+                    'request_extra_km_rate'   => $request->extra_km_rate,
+                    'request_extra_hour_rate' => $request->extra_hour_rate,
+                    'request_pricing_details' => $request->pricing_details,
+                    'derived_rentalPrice'     => $rentalPrice,      // smallest non-zero tier value
+                    'derived_rentalPriceHour' => $rentalPriceHour,
+                ]);
+
                 $notShowPrice = [];
                 $vehiclePriceDetails = VehiclePriceDetail::where('vehicle_id', $vehicle->vehicle_id)->get();
                 $oldPriceSummary = clone $vehiclePriceDetails;
@@ -1785,6 +1796,13 @@ class VehicleInfoController extends Controller
                 $vehicle->extra_km_rate = $request->extra_km_rate;
                 $vehicle->extra_hour_rate = $request->extra_hour_rate;
                 $vehicle->save();
+
+                // [RENTAL PRICE DEBUG] log what was actually persisted to each table
+                \Log::info('[RENTAL PRICE DEBUG] price_calculation stored', [
+                    'vehicle_id'                         => $vehicle->vehicle_id,
+                    'vehicles_table_rental_price'        => $vehicle->rental_price,   // from $request->rental_price
+                    'vehicle_price_details_rental_price' => $rentalPrice,             // from derived smallest tier
+                ]);
 
                 $oldArr = [
                     'oldPriceSummary' => $oldPriceSummary
