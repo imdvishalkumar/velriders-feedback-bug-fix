@@ -56,7 +56,7 @@ class CustomerDataController extends Controller
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
-        $customers = Customer::select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob', 'profile_picture_url', 'billing_address', 'shipping_address', 'device_token', 'device_id', 'is_deleted', 'is_blocked')->where('is_deleted', 0);
+        $customers = Customer::select('customer_id', 'country_code', 'mobile_number', 'email', 'firstname', 'lastname', 'dob', 'profile_picture_url', 'billing_address', 'shipping_address', 'device_token', 'device_id', 'is_deleted', 'is_blocked', 'block_reason')->where('is_deleted', 0);
         if (!empty($request->customer_id)) {
             $customers = $customers->where('customer_id', $request->customer_id)->first();
             $customerStatus = $this->getCustomerStatus($customers);
@@ -285,6 +285,7 @@ class CustomerDataController extends Controller
         $validator = Validator::make($request->all(), [
             'customer_id' => 'required|exists:customers,customer_id',
             'status' => 'required|in:1,0',
+            'block_reason' => 'required_if:status,1|nullable|string|max:1000',
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
@@ -293,6 +294,8 @@ class CustomerDataController extends Controller
         $custId = $request->customer_id;
         $customer = Customer::find($custId);
         $customer->is_blocked = $request->status;
+        // Store the reason when blocking; clear it when un-blocking.
+        $customer->block_reason = $request->status == 1 ? $request->block_reason : null;
         $customer->save();
 
         if ($request->status == 1) {

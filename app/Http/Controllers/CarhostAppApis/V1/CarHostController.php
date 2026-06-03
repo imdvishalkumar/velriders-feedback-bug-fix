@@ -147,6 +147,8 @@ class CarHostController extends Controller
         $paidPenaltyServiceCharge = $invoiceData['paidPenaltyServiceCharge'];
         $duePenalties = $invoiceData['duePenalties'];
         $duePenaltyServiceCharge = $invoiceData['duePenaltyServiceCharge'];
+        $paidAdjustments = $invoiceData['paidAdjustments'];
+        $dueAdjustments = $invoiceData['dueAdjustments'];
         $groupedTotals = $invoiceData['groupedTotals'];
         $totalAmt = $invoiceData['totalAmt'];
         $amountDue = $invoiceData['amountDue'];
@@ -182,7 +184,8 @@ class CarHostController extends Controller
             'newBookingTimeStamp', 'completionNewBooking', 'adminPenaltiesDue',
             'newBookingVehicleServiceFees', 'extensionVehicleServiceFees',
             'completionVehicleServiceFees', 'paidPenalties', 'paidPenaltyServiceCharge',
-            'duePenalties', 'duePenaltyServiceCharge', 'amountDue', 'groupedTotals', 'displayTotal', 'roundOffs'
+            'duePenalties', 'duePenaltyServiceCharge', 'paidAdjustments', 'dueAdjustments',
+            'amountDue', 'groupedTotals', 'displayTotal', 'roundOffs'
         ))->setPaper('A3');
 
         return $pdf->stream('booking-invoice.pdf');
@@ -820,6 +823,8 @@ class CarHostController extends Controller
             'paidPenaltyServiceCharge' => [],
             'duePenalties' => [],
             'duePenaltyServiceCharge' => [],
+            'paidAdjustments' => [],
+            'dueAdjustments' => [],
             'roundOffs' => [
                 'newBooking' => 0.0,
                 'extension' => [],
@@ -861,11 +866,19 @@ class CarHostController extends Controller
         $isPaid = $transaction->paid == 1;
         $finalAmount = $transaction->final_amount ?? 0;
 
-        if ($totalAmount <= 0) {
+        if ($totalAmount == 0) {
             return;
         }
 
-        // Skip unpaid penalties with no final amount
+        // Negative penalty -> render as a deduction/adjustment line (no VS commission).
+        // Phase 1 already subtracted paid-negative penalties from grandTotal, so the line
+        // here is purely a display entry that reconciles with the smaller Amount Paid.
+        if ($totalAmount < 0) {
+            $this->renderAdjustmentLine($transaction, $bookingGstRate, $result);
+            return;
+        }
+
+        // Skip paid penalties with no final amount (existing behaviour for positives)
         if ($isPaid && $finalAmount <= 0) {
             return;
         }
@@ -947,7 +960,52 @@ class CarHostController extends Controller
         }
     }
 
+    /**
+     * Render a negative penalty transaction as an Adjustment / Deduction line.
+     * No vehicle-service commission is applied. Negative values flow through as-is so
+     * the PDF shows e.g. -500.00 and the totals reconcile against the reduced Grand Total.
+     */
+    private function renderAdjustmentLine(
+        BookingTransaction $transaction,
+        float $bookingGstRate,
+        array &$result
+    ): void {
+        $totalAmount = (float) ($transaction->total_amount ?? 0);
+        $taxAmt = (float) ($transaction->tax_amt ?? 0);
+        $timestamp = $transaction->timestamp ? date('d-m-Y H:i', strtotime($transaction->timestamp)) : '';
+        $isPaid = $transaction->paid == 1;
 
+        // Reverse-calc base/gst from the stored negative amounts using the same booking GST rate.
+        // Avoid dividing by a multiplier that would absorb VS — adjustments are pure base+GST.
+        $adjGrandTotal = $totalAmount + $taxAmt;
+        $multiplier = 1 + $bookingGstRate;
+        $adjBase = $multiplier > 0 ? $adjGrandTotal / $multiplier : $adjGrandTotal;
+        $adjGst = $adjBase * $bookingGstRate;
+        $adjTotal = $adjBase + $adjGst;
+
+        $gstPercentInt = (int) ($bookingGstRate * 100);
+
+        $bucket = $isPaid ? 'paidAdjustments' : 'dueAdjustments';
+        $result[$bucket]['timestamp'][]       = $timestamp;
+        $result[$bucket]['trip_amount'][]     = number_format($adjBase, 2);
+        $result[$bucket]['tax_percent'][]     = number_format($gstPercentInt, 2);
+        $result[$bucket]['tax_amount'][]      = number_format($adjGst, 2);
+        $result[$bucket]['coupon_discount'][] = number_format(0, 2);
+        $result[$bucket]['total_amount'][]    = number_format($adjBase, 2);
+
+        $result['displayTotal'] += $adjBase;
+        $result['rateTotal']    += $adjBase;
+        $result['totalTax']     += $adjGst;
+
+        $result['groupedTotals'][$gstPercentInt]['rate'] += $adjBase;
+        $result['groupedTotals'][$gstPercentInt]['tax'] += $adjGst;
+
+        if (!$isPaid) {
+            // Unpaid negative penalty reduces Amount Due (it's a credit against pending dues).
+            $result['amountDue'] += $adjTotal;
+        }
+        // Paid negative penalty: Phase 1 already subtracted it from grandTotal, no double counting here.
+    }
 
 
 

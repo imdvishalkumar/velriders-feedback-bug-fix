@@ -313,7 +313,8 @@ class AdminBookingController extends Controller
         $data['admin_penalty_id'] = '';
         $data['exceed_km_limit'] = '';
         $data['exceed_hour_limit'] = '';
-        $booking = RentalBooking::select('booking_id', 'customer_id', 'end_otp', 'vehicle_id', 'end_datetime', 'pickup_date', 'return_date', 'unlimited_kms', 'start_kilometers', 'end_kilometers', 'start_datetime', 'end_datetime', 'status', 'rental_duration_minutes')->where('booking_id', $request->booking_id)->first();
+        $data['tax_amt'] = '';
+        $booking = RentalBooking::select('booking_id', 'customer_id', 'end_otp', 'vehicle_id', 'end_datetime', 'pickup_date', 'return_date', 'unlimited_kms', 'start_kilometers', 'end_kilometers', 'start_datetime', 'end_datetime', 'status', 'rental_duration_minutes', 'tax_rate')->where('booking_id', $request->booking_id)->first();
         if (!$booking) {
             return $this->errorResponse('Invalid Booking');
         }
@@ -372,6 +373,26 @@ class AdminBookingController extends Controller
         $data['admin_penalty_id'] = $adminPenaltyId;
         $data['exceed_km_limit'] = round($exceededKilometerPenalty);
         $data['exceed_hour_limit'] = round($exceededHourPenalty);
+
+        // Calculate the tax on the penalty amounts using the same formula
+        // applied when the journey is completed (see end_journey in getPriceSummary).
+        $taxRate = $booking->tax_rate ?? 0;
+        $customer = Customer::where('customer_id', $booking->customer_id)->first();
+        $customerGst = $customer->gst_number ?? '';
+        if ($taxRate <= 0) {
+            $taxRate = $customerGst ? 0.18 : 0.05;
+        }
+        $totalPenalty = (float) $data['admin_penalty'] + (float) $data['exceed_km_limit'] + (float) $data['exceed_hour_limit'];
+        $vehicleCommissionTaxAmt = 0;
+        if ($totalPenalty > 0) {
+            $vehicleCommissionPercent = $booking->vehicle->commission_percent ?? 0;
+            if ($vehicleCommissionPercent > 0) {
+                $vehicleCommissionAmt = round(($totalPenalty * $vehicleCommissionPercent) / 100);
+                $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
+            }
+        }
+        $taxAmt = ($totalPenalty * $taxRate) + $vehicleCommissionTaxAmt;
+        $data['tax_amt'] = round($taxAmt, 2);
 
         return $this->successResponse($data, "Penalty details are get successfully");
     }
@@ -1220,8 +1241,14 @@ class AdminBookingController extends Controller
         }
 
         $bookingTransaction = '';
-        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle.vehicleEligibility.carHost', 'payment', 'paymentReportHistory'])->where('booking_id', $request->booking_id)->first();
+        $rentalBookingDetails = RentalBooking::with(['customer:customer_id,firstname,lastname,dob,email,mobile_number,billing_address,shipping_address,email_verified_at,is_blocked', 'vehicle.vehicleEligibility.carHost', 'vehicle.model.category.vehicleType', 'payment', 'paymentReportHistory'])->where('booking_id', $request->booking_id)->first();
         if ($rentalBookingDetails) {
+            if ((int) ($rentalBookingDetails->unlimited_kms ?? 0) !== 1) {
+                $durationHours = ((float) ($rentalBookingDetails->rental_duration_minutes ?? 0)) / 60;
+                $vehicleTypeName = $rentalBookingDetails->vehicle?->model?->category?->vehicleType?->name ?? null;
+                $rentalBookingDetails->km_limit = calculateKmLimit($durationHours, $vehicleTypeName);
+            }
+
             $providerAddress = '';
             if ($rentalBookingDetails->vehicle && $rentalBookingDetails->vehicle->vehicleEligibility && $rentalBookingDetails->vehicle->vehicleEligibility->carHost) {
                 $providerAddress = $rentalBookingDetails->vehicle->vehicleEligibility->carHost->billing_address;
@@ -1293,7 +1320,7 @@ class AdminBookingController extends Controller
         $rentalBookingDetails->vehicle->makeHidden(['availability_calendar', 'commission_percent', 'publish', 'chassis_no', 'cutout_image', 'banner_image', 'banner_images', 'regular_images', 'rating', 'total_rating', 'trip_count']);
         $rentalBookingDetails->total_cost = getPaidFinalAmtSum($rentalBookingDetails->booking_id);
 
-        $hostInvoicePdf = (isset($rentalBookingDetails->status) && in_array(strtolower($rentalBookingDetails->status), ['confirmed', 'completed', 'running'])) ? url('api/host/v1/carhost-booking-invoice/' . $request->booking_id) : null;
+        $hostInvoicePdf = (isset($rentalBookingDetails->status) && strtolower($rentalBookingDetails->status) === 'completed') ? url('api/host/v1/carhost-booking-invoice/' . $request->booking_id) : null;
 
         $rentalBookingDetails->host_invoice_pdf = $hostInvoicePdf;
 
@@ -1418,6 +1445,9 @@ class AdminBookingController extends Controller
         });
         //$validator->sometimes(['end_journey_imgs', 'end_km'], 'required', function ($input) {
         $validator->sometimes(['end_km'], 'required|integer|min:1|regex:/^\d{1,7}$/', function ($input) {
+            return $input->preview_action == 'end_journey';
+        });
+        $validator->sometimes(['admin_penalty', 'exceed_km_limit', 'exceed_hours_limit'], 'nullable|numeric|min:0', function ($input) {
             return $input->preview_action == 'end_journey';
         });
 
@@ -1995,9 +2025,9 @@ class AdminBookingController extends Controller
             if ($customerDocument) {
                 return $this->errorResponse("You can not End this Journey due to this customer's documents blocked");
             }
-            $adminPenalty = $request->admin_penalty ?? 0;
-            $exceedKmLimit = $request->exceed_km_limit ?? 0;
-            $exceedHourLimit = $request->exceed_hours_limit ?? 0;
+            $adminPenalty = is_numeric($request->admin_penalty) ? (float) $request->admin_penalty : 0;
+            $exceedKmLimit = is_numeric($request->exceed_km_limit) ? (float) $request->exceed_km_limit : 0;
+            $exceedHourLimit = is_numeric($request->exceed_hours_limit) ? (float) $request->exceed_hours_limit : 0;
             $adminPenaltyInfo = $request->admin_penalty_info ?? '';
             $adminPenaltyId = $request->admin_penalty_id ?? '';
             $taxRate = $rentalBooking->tax_rate ?? 0;
@@ -2184,6 +2214,7 @@ class AdminBookingController extends Controller
             return $this->successResponse($cancelRentalBooking, "Cancellation of the booking has been successfully reversed.");
         }
     }
+    
     public function uploadBookingImages(Request $request)
     {
         $validator = Validator::make($request->all(), [

@@ -40,6 +40,7 @@ class Customer extends Authenticatable implements JWTSubject
         'gst_number',
         'is_deleted',
         'is_blocked',
+        'block_reason',
         'gauth_id',
         'gauth_type',
         'device_token',

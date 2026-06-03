@@ -275,7 +275,9 @@ class CarHostVehicleDetailsController extends Controller
         }
 
         $currentDateTime = Carbon::now()->setTimezone('Asia/Kolkata');
-        $oneHourAgo = $currentDateTime->subHour();
+        // $oneHourAgo = $currentDateTime->subHour();
+        // Confirmed bookings are not shown to the host until 24 hours before the booking start time.
+        $bookingWindowEnd = $currentDateTime->copy()->addDay();
         $user = Auth::guard('api-carhost')->user();
         $carEligibilityIds = CarEligibility::where('car_hosts_id', $user->id)->pluck('vehicle_id')->toArray();
         $query = RentalBooking::with([
@@ -288,7 +290,10 @@ class CarHostVehicleDetailsController extends Controller
             'vehicle' => function ($query) {
                 $query->select('vehicle_id', 'model_id');
             }
-        ])->whereIn('vehicle_id', $carEligibilityIds)->orderBy('created_at', 'desc');
+        ])->whereIn('vehicle_id', $carEligibilityIds)
+            ->where('status', 'confirmed')
+            ->where('pickup_date', '<=', $bookingWindowEnd)
+            ->orderBy('created_at', 'desc');
 
         //Vehicle Filter
         if (isset($request->vehicle_id) && $request->vehicle_id != '') {
@@ -332,14 +337,14 @@ class CarHostVehicleDetailsController extends Controller
             }
 
             // Filter the paginated results
-            $rentalBookings->getCollection()->filter(function ($item) use ($oneHourAgo) {
-                if ($item->status != 'pending') {
-                    return true;
-                } else {
-                    $creationDateTime = Carbon::parse($item->created_at);
-                    return $creationDateTime->greaterThanOrEqualTo($oneHourAgo);
-                }
-            });
+            // $rentalBookings->getCollection()->filter(function ($item) use ($oneHourAgo) {
+            //     if ($item->status != 'pending') {
+            //         return true;
+            //     } else {
+            //         $creationDateTime = Carbon::parse($item->created_at);
+            //         return $creationDateTime->greaterThanOrEqualTo($oneHourAgo);
+            //     }
+            // });
 
             // Hide specific attributes
             $rentalBookings->getCollection()->each(function ($item) use ($now) {
@@ -385,14 +390,14 @@ class CarHostVehicleDetailsController extends Controller
                 return $this->errorResponse("Bookings are not Found");
             }
             // Filter the results
-            $rentalBookings = $rentalBookings->filter(function ($item) use ($oneHourAgo) {
-                if ($item->status != 'pending') {
-                    return true;
-                } else {
-                    $creationDateTime = Carbon::parse($item->created_at);
-                    return $creationDateTime->greaterThanOrEqualTo($oneHourAgo);
-                }
-            });
+            // $rentalBookings = $rentalBookings->filter(function ($item) use ($oneHourAgo) {
+            //     if ($item->status != 'pending') {
+            //         return true;
+            //     } else {
+            //         $creationDateTime = Carbon::parse($item->created_at);
+            //         return $creationDateTime->greaterThanOrEqualTo($oneHourAgo);
+            //     }
+            // });
 
             // Hide specific attributes
             $rentalBookings->each(function ($item) use ($now) {

@@ -289,6 +289,53 @@ body {
                                 @endif
                             @endforeach
                         @endif
+                        <!-- ADJUSTMENTS / DEDUCTIONS (negative penalty entries) -->
+                        @if($page == $totalPages - 1 && is_countable($paidAdjustments) && count($paidAdjustments) > 0)
+                            @foreach($paidAdjustments['trip_amount'] as $key => $val)
+                                <tr style="background-color: #d6f0ff;">
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 6px;font-weight: normal;">
+                                            <b>Adjustment (Paid)</b> | <b>@isset($paidAdjustments['timestamp'][$key]){{$paidAdjustments['timestamp'][$key]}}@endisset</b><br/>
+                                        </h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">1.00</h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">@isset($paidAdjustments['trip_amount'][$key]){{$paidAdjustments['trip_amount'][$key]}}@endisset</h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">@isset($paidAdjustments['coupon_discount'][$key]){{$paidAdjustments['coupon_discount'][$key]}}@endisset</h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">@isset($paidAdjustments['total_amount'][$key]){{$paidAdjustments['total_amount'][$key]}}@endisset</h5>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        @endif
+                        @if($page == $totalPages - 1 && is_countable($dueAdjustments) && count($dueAdjustments) > 0)
+                            @foreach($dueAdjustments['trip_amount'] as $key => $val)
+                                <tr style="background-color: #d6f0ff;">
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 6px;font-weight: normal;">
+                                            <b>Adjustment (Due)</b> | <b>@isset($dueAdjustments['timestamp'][$key]){{$dueAdjustments['timestamp'][$key]}}@endisset</b><br/>
+                                        </h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">1.00</h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">@isset($dueAdjustments['trip_amount'][$key]){{$dueAdjustments['trip_amount'][$key]}}@endisset</h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">@isset($dueAdjustments['coupon_discount'][$key]){{$dueAdjustments['coupon_discount'][$key]}}@endisset</h5>
+                                    </td>
+                                    <td style="border-right: 1px solid #000; border-bottom: 1px solid #000;">
+                                        <h5 style="margin: 5px;font-weight: normal;text-align: right;">@isset($dueAdjustments['total_amount'][$key]){{$dueAdjustments['total_amount'][$key]}}@endisset</h5>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        @endif
                 </tbody>
             </table>
         @endfor

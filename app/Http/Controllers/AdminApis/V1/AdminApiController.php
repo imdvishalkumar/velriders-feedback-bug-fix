@@ -237,6 +237,7 @@ class AdminApiController extends Controller
                 $booking = $payment->booking;
                 if ($booking) {
                     $booking->pending_amount = $payment->amount;
+                    $booking->pending_reason = $this->derivePendingPaymentReason($payment);
                     // Add km_limit for consistency
                     if ($booking->vehicle) {
                         $booking->km_limit = calculateKmLimit($booking->rental_duration_minutes / 60, $booking->vehicle?->model?->category?->vehicleType?->name ?? null);
@@ -310,6 +311,32 @@ class AdminApiController extends Controller
                 'trace' => $e->getTraceAsString(),
             ], 500);
         }
+    }
+
+    private function derivePendingPaymentReason(Payment $payment): string
+    {
+        if ($payment->razorpay_order_id === 'admin_booking') {
+            return 'Admin booking — awaiting offline collection';
+        }
+
+        if (strtolower((string) $payment->payment_mode) === 'cash') {
+            return 'Cash payment not yet collected';
+        }
+
+        $typeLabel = match (strtolower((string) $payment->payment_type)) {
+            'new_booking' => 'New booking payment not completed',
+            'extension'   => 'Extension payment not completed',
+            'completion'  => 'Final/completion payment due',
+            'penalty'     => 'Penalty payment due',
+            default       => 'Payment not completed',
+        };
+
+        $gateway = $payment->payment_gateway_used;
+        if (!empty($gateway)) {
+            $typeLabel .= ' (via ' . ucfirst(strtolower($gateway)) . ')';
+        }
+
+        return $typeLabel;
     }
 
     public function getAllRoles(Request $request)
