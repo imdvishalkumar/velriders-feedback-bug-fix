@@ -292,6 +292,8 @@ class LoginController extends Controller
     public function customerAggrement($bookingId){
         $vehicleRegistrationNo = '-';
         $bookingStartDate = '';
+        $isHostedVehicle = false;
+        $hostName = '';
         $booking = RentalBooking::select('booking_id', 'vehicle_id', 'start_datetime', 'pickup_date', 'customer_id')->where('booking_id', $bookingId)->first();
         $customer = Customer::where('customer_id', $booking->customer_id)->first();
         $name = '';
@@ -307,13 +309,15 @@ class LoginController extends Controller
             if ($carEligibility && $carEligibility->carHost) {
                 $ownerName .= $carEligibility->carHost->firstname ?? '';
                 $ownerName .= ' '.$carEligibility->carHost->lastname ?? '';
+                $isHostedVehicle = true;
+                $hostName = trim(($carEligibility->carHost->firstname ?? '') . ' ' . ($carEligibility->carHost->lastname ?? ''));
             }
             $bookingStartDate = $booking->start_datetime ? date('d-m-Y H:i', strtotime($booking->start_datetime)) : date('d-m-Y H:i', strtotime($booking->pickup_date));
         }
         $fileName = 'customer_agreements_'.$booking->customer_id.'_'.$bookingId.'.pdf';
         $path = public_path().'/customer_aggrements/';
 
-        $pdf = PDF::loadView('customer_aggrement', compact('name', 'bookingId', 'ownerName', 'bookingStartDate', 'vehicleRegistrationNo'));
+        $pdf = PDF::loadView('customer_aggrement', compact('name', 'bookingId', 'ownerName', 'bookingStartDate', 'vehicleRegistrationNo', 'isHostedVehicle', 'hostName'));
         return $pdf->stream($fileName);
     }
 

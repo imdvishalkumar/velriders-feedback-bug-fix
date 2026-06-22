@@ -719,6 +719,8 @@ function generateCustomerPdf($customerId, $bookingId)
     $bookingId = $bookingId;
     $vehicleRegistrationNo = '-';
     $bookingStartDate = '';
+    $isHostedVehicle = false;
+    $hostName = '';
     $booking = RentalBooking::select('booking_id', 'vehicle_id', 'start_datetime', 'pickup_date')->where('booking_id', $bookingId)->first();
     if ($booking) {
         $vehicle = Vehicle::where('vehicle_id', $booking->vehicle_id)->first();
@@ -727,6 +729,8 @@ function generateCustomerPdf($customerId, $bookingId)
         if ($carEligibility && $carEligibility->carHost) {
             $ownerName .= $carEligibility->carHost->firstname ?? '';
             $ownerName .= ' ' . $carEligibility->carHost->lastname ?? '';
+            $isHostedVehicle = true;
+            $hostName = trim(($carEligibility->carHost->firstname ?? '') . ' ' . ($carEligibility->carHost->lastname ?? ''));
         }
         $bookingStartDate = $booking->start_datetime ? date('d-m-Y H:i', strtotime($booking->start_datetime)) : date('d-m-Y H:i', strtotime($booking->pickup_date));
     }
@@ -736,7 +740,7 @@ function generateCustomerPdf($customerId, $bookingId)
     if (file_exists($fullPath)) {
         unlink($fullPath); // delete existing file
     }
-    $pdf = PDF::loadView('customer_aggrement', compact('name', 'bookingId', 'ownerName', 'bookingStartDate', 'vehicleRegistrationNo' /*, 'vehicleChassisNo'*/));
+    $pdf = PDF::loadView('customer_aggrement', compact('name', 'bookingId', 'ownerName', 'bookingStartDate', 'vehicleRegistrationNo', 'isHostedVehicle', 'hostName' /*, 'vehicleChassisNo'*/));
     $pdf->save($path . $fileName);
     //return $pdf->stream('customer_aggrement.pdf');
 }

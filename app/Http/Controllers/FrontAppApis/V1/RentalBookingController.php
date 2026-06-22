@@ -1639,6 +1639,22 @@ class RentalBookingController extends Controller
     {
         $adminPenalty = AdminPenalty::select('id', 'booking_id', 'amount', 'penalty_details', 'is_paid', 'razorpay_order_id', 'cashfree_order_id')->where(['booking_id' => $booking_id, 'is_paid' => 0])->where('amount', '!=', 0)->first();
         if (!$adminPenalty) {
+            // No admin penalty applied, but the booking may still owe a completion payment
+            // (journey ended with charges exceeding the refundable deposit). In that case the
+            // app must be routed through the completion payment flow instead of being blocked
+            // with "No any Penalty has applied". Delegate to deductPayment so a single Pay-Now
+            // tap works regardless of whether the outstanding amount is a penalty or completion.
+            $pendingCompletion = BookingTransaction::where('booking_id', $booking_id)
+                ->where('type', 'completion')
+                ->where('paid', 0)
+                ->where(function ($query) {
+                    $query->where('amount_to_pay', '>', 0)
+                        ->orWhere('final_amount', '>', 0);
+                })
+                ->first();
+            if ($pendingCompletion) {
+                return $this->deductPayment($request, $booking_id);
+            }
             return $this->errorResponse('No any Penalty has applied');
         }
         $payableAmt = (float) $adminPenalty->amount;

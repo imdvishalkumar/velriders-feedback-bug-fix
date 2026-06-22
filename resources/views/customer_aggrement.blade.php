@@ -24,6 +24,8 @@
 }
 </style>
 </head>
+@php($isHostedVehicle = $isHostedVehicle ?? false)
+@php($hostName = $hostName ?? '')
 <body>
 <div class="container">
         <div class="content">
