@@ -29,12 +29,12 @@ use App\Http\Controllers\FrontControllers\SocialLoginController;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\FrontAppApis\V1\RentalBookingController as RentalBooking;
- 
+
 Route::get('test', [AdminController::class, 'testCode']);
 Route::post('test1', [AdminController::class, 'testCode1']);
 
 
-    
+
 /*Route::get('testsubdomain', function () {
     return 'First sub domain';
 })->domain('api.velriders.com');*/
@@ -54,30 +54,30 @@ Route::name("front.")->group(function ($router) {
     Route::post('front/icici-payment-callback', [RentalBooking::class, 'iciciPaymentCallback']);
 
     // CMS Pages
-   /* Route::get('/', [CmsController::class, 'home'])->name('home');
+    /* Route::get('/', [CmsController::class, 'home'])->name('home');
 
-    Route::get('about-us', [CmsController::class, 'aboutUs'])->name('about-us');
-    Route::get('terms-condition', [CmsController::class, 'termsCondition'])->name('terms-condition');
-    Route::get('contact-us', [CmsController::class, 'contactUs'])->name('contact-us');
-    Route::get('privacy-policy', [CmsController::class, 'privacyPolicy'])->name('privacy-policy');
-    Route::get('refund-policy', [CmsController::class, 'refundPolicy'])->name('refund-policy');
-    Route::get('pricing-policy', [CmsController::class, 'pricingPolicy'])->name('pricing-policy');
+     Route::get('about-us', [CmsController::class, 'aboutUs'])->name('about-us');
+     Route::get('terms-condition', [CmsController::class, 'termsCondition'])->name('terms-condition');
+     Route::get('contact-us', [CmsController::class, 'contactUs'])->name('contact-us');
+     Route::get('privacy-policy', [CmsController::class, 'privacyPolicy'])->name('privacy-policy');
+     Route::get('refund-policy', [CmsController::class, 'refundPolicy'])->name('refund-policy');
+     Route::get('pricing-policy', [CmsController::class, 'pricingPolicy'])->name('pricing-policy');
 
-    Route::get('/about_us', [CmsController::class, 'aboutUsNew'])->name('about_us');
-    Route::get('/contact_us', [CmsController::class, 'contactUsNew'])->name('contact_us');
-    Route::post('/post-contact_us', [CmsController::class, 'storeContactUs'])->name('store-contact_us');
-    Route::post('subscribe-form', [CmsController::class, 'subscribeForm'])->name('subscribe-form');
+     Route::get('/about_us', [CmsController::class, 'aboutUsNew'])->name('about_us');
+     Route::get('/contact_us', [CmsController::class, 'contactUsNew'])->name('contact_us');
+     Route::post('/post-contact_us', [CmsController::class, 'storeContactUs'])->name('store-contact_us');
+     Route::post('subscribe-form', [CmsController::class, 'subscribeForm'])->name('subscribe-form');
 
-    // Login
-    Route::get('login', [LoginController::class, 'Login'])->name('login');
-    Route::get('/verify-login', [LoginController::class, 'LoginPost'])->name('verify-login');
-    Route::post('/verify-login-otp', [LoginController::class, 'verifyLoginOtp'])->name('verify-login-otp');
-    Route::get('/confirm-details', [LoginController::class, 'getConfirmDetails'])->name('confirm-details');
-    Route::post('/store-confirm-details', [LoginController::class, 'storeConfirmDetails'])->name('store-confirm-details');
+     // Login
+     Route::get('login', [LoginController::class, 'Login'])->name('login');
+     Route::get('/verify-login', [LoginController::class, 'LoginPost'])->name('verify-login');
+     Route::post('/verify-login-otp', [LoginController::class, 'verifyLoginOtp'])->name('verify-login-otp');
+     Route::get('/confirm-details', [LoginController::class, 'getConfirmDetails'])->name('confirm-details');
+     Route::post('/store-confirm-details', [LoginController::class, 'storeConfirmDetails'])->name('store-confirm-details');
 
-    //Login with Google
-    Route::get('auth/google', [SocialLoginController::class, 'signInwithGoogle']);
-   // Route::get('callback/google', [SocialLoginController::class, 'callbackToGoogle']);*/
+     //Login with Google
+     Route::get('auth/google', [SocialLoginController::class, 'signInwithGoogle']);
+    // Route::get('callback/google', [SocialLoginController::class, 'callbackToGoogle']);*/
 
     // Delete Customer through Mobile Verificvation
     Route::get('delete-account', [CmsController::class, 'deleteAccountThroughWeb'])->name('delete-account');
@@ -85,14 +85,14 @@ Route::name("front.")->group(function ($router) {
     Route::post('verify-send-otp', [CmsController::class, 'verifySendOtp'])->name('verify-send-otp');
 
     Route::get('verify/customer-email/{customer_id}/{email}/{app}', [LoginController::class, 'verifyCustomerEmail'])->name('verify-customer-email');
-    Route::get('/verify-email-success/{status}', [LoginController::class, 'verifyEmailSuccess'])->name('verify-email-success'); 
+    Route::get('/verify-email-success/{status}', [LoginController::class, 'verifyEmailSuccess'])->name('verify-email-success');
 
 
     // Delete Car Host through Mobile Verificvation
     Route::get('delete-host-account', [CmsController::class, 'deleteHostAccountThroughWeb'])->name('delete-host-account');
     Route::post('send-host-otp', [CmsController::class, 'sendHostOtp'])->name('send-host-otp');
     Route::post('verify-host-send-otp', [CmsController::class, 'verifyHostSendOtp'])->name('verify-host-send-otp');
-   
+
 });
 
 /*----------------------------------------------------------------------------------------------------------------------------------------------------*/
@@ -130,10 +130,10 @@ Route::prefix('admin')->middleware('admin-guard')->group(function () {
     Route::post('/admin/customer-documents/{id}/approve', [CustomerDocumentController::class, 'approve'])->name('admin.customer_documents.approve');
     Route::post('/admin/customer-documents/{id}/reject', [CustomerDocumentController::class, 'reject'])->name('admin.customer_documents.reject');
     Route::post('/delete-customer', [CustomerController::class, 'deleteCustomer'])->name('delete.customer');
-    Route::post('/block-customer', [CustomerController::class, 'blockCustomer'])->name('block.customer');  
-    
+    Route::post('/block-customer', [CustomerController::class, 'blockCustomer'])->name('block.customer');
+
     Route::get('/customer/edit/{id}', [CustomerController::class, 'edit']);
-    Route::post('/customer/update', [CustomerController::class, 'update']); 
+    Route::post('/customer/update', [CustomerController::class, 'update']);
 
     Route::get('/customer/sendmail/{id}', [CustomerController::class, 'customerSendMail']);
 
@@ -172,7 +172,7 @@ Route::prefix('admin')->middleware('admin-guard')->group(function () {
     Route::post('/submit-vehicle-category', [VehicleCategoryController::class, 'store'])->name('submit.vehicle-category');
     Route::get('/get-vehicle-category', [VehicleCategoryController::class, 'getVehicleCategory'])->name('admin.get-vehicle-category');
     Route::delete('/delete-vehicle-category', [VehicleCategoryController::class, 'deleteVehicleCategory'])->name('admin.delete-vehicle-category');
-    
+
     //Vehicle Transmission
     Route::get('/vehicle-transmission', [VehicleTransmissionController::class, 'index'])->name('admin.vehicle-transmission');
     Route::get('/get-all-vehicle-transmissions', [VehicleTransmissionController::class, 'getAllVehicleTransmission'])->name('admin.get-all-vehicle-transmissions');
@@ -205,7 +205,7 @@ Route::prefix('admin')->middleware('admin-guard')->group(function () {
     })->name('admin.customers-documents');
     Route::get('/get-all-documents', [CustomerDocumentController::class, 'fetchDocuments'])->name('admin.get-all-documents');
     Route::post('/toggle-document-status', [CustomerDocumentController::class, 'toggleDcoumentStatus'])->name('admin.toggle-document-status');
-    Route::post('/block-customer-document', [CustomerDocumentController::class, 'blockCustomerDocument'])->name('admin.block-customer-document'); 
+    Route::post('/block-customer-document', [CustomerDocumentController::class, 'blockCustomerDocument'])->name('admin.block-customer-document');
 
     Route::get('/vehicles', [VehicleController::class, 'getAllVehicleList'])->name('admin.vehicles');
     Route::get('/vehicle/create', [VehicleController::class, 'getInsertForm'])->name('admin.vehicle.create');
@@ -226,7 +226,7 @@ Route::prefix('admin')->middleware('admin-guard')->group(function () {
     Route::get('/get-category', [VehicleController::class, 'getCategory'])->name('admin.get-category');
     Route::get('/get-minmax-rentalprice', [VehicleController::class, 'getMinMaxRentalPrice'])->name('admin.get-minmax-rentalprice');
     Route::get('/check-updatedprice', [VehicleController::class, 'checkUpdatedPrice'])->name('admin.check-updatedprice');
-    Route::post('/publish-vehicle', [VehicleController::class, 'publishVehicle'])->name('publish.vehicle');  
+    Route::post('/publish-vehicle', [VehicleController::class, 'publishVehicle'])->name('publish.vehicle');
 
     Route::get('/bookings', [RentalBookingController::class, 'getBookingList'])->name('admin.bookings');
     Route::post('/bookings-ajaxdata', [RentalBookingController::class, 'bookingsAjax'])->name('admin.bookings.ajax');
@@ -271,13 +271,13 @@ Route::prefix('admin')->middleware('admin-guard')->group(function () {
     Route::post('/store-start-journey-details', [RentalBookingController::class, 'storeStartJourneyDetails'])->name('admin.store.start-journey-details');
     Route::post('/store-end-journey-details', [RentalBookingController::class, 'storeEndJourneyDetails'])->name('admin.store.end-journey-details');
     Route::post('/get-penalty-details', [RentalBookingController::class, 'getPenaltyDetails'])->name('admin.get-penalty-details');
-    
+
 
     Route::post('/check-vehicle', [RentalBookingController::class, 'checkVehicle'])->name('admin.check-vehicle');
     Route::post('/check-customer', [RentalBookingController::class, 'checkCustomer'])->name('admin.check-customer');
     Route::post('/insert-booking', [RentalBookingController::class, 'insertBooking'])->name('admin.booking-insert');
     Route::get('/get-pending-booking', [RentalBookingController::class, 'getPendingBooking'])->name('admin.get-pending-booking');
-    
+
     Route::get('/customer-canceled-refund', [RentalBookingController::class, 'customerCanceledRefund'])->name('admin.customer.canceled.refund');
     Route::post('/canceled-refund-process', [RentalBookingController::class, 'customerCanceledRefundProcess'])->name('admin.cenceled.refund.process');
 
@@ -299,7 +299,7 @@ Route::prefix('admin')->middleware('admin-guard')->group(function () {
     Route::post('/coupon/update/{id}', [CouponController::class, 'updateCoupon'])->name('admin.update-coupon');
     Route::post('/coupon/delete', [CouponController::class, 'destroyCoupon'])->name('admin.delete-coupon');
     Route::post('/check-coupon-code', [CouponController::class, 'checkCouponCode'])->name('admin.check.coupon.code');
-Route::post('/validate-todate', [CouponController::class, 'validateToDate'])->name('admin.validate.todate');
+    Route::post('/validate-todate', [CouponController::class, 'validateToDate'])->name('admin.validate.todate');
 
     Route::get('/carhost-mgt', [CarHostController::class, 'getCarHostList'])->name('admin.carhost-mgt');
     Route::get('/get-all-carhost', [CarHostController::class, 'getAllCarHost'])->name('admin.get-all-carhost');

@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\FrontAppApis;
 
-use App\Http\Controllers\Controller; 
+use App\Http\Controllers\Controller;
 use App\Models\{CustomerDocument, Customer, RentalBooking, Setting};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -95,7 +95,7 @@ class CustomerDocumentController extends Controller
         $customerId = $user->customer_id;
 
         $checkBooking = RentalBooking::where('customer_id', $customerId)->whereNotIn('status', ['pending', 'no show', 'canceled', 'failed'])->exists();
-        if(!$checkBooking) {
+        if (!$checkBooking) {
             return $this->errorResponse('You cannot upload documents without an active booking.');
         }
 
@@ -135,7 +135,7 @@ class CustomerDocumentController extends Controller
             }
             $responseJson = NULL;
             $client = new Client();
-            $dlNumber = str_replace(' ', '',$request->id_number);
+            $dlNumber = str_replace(' ', '', $request->id_number);
             $dob = $request->dob;
             $uniqueDlId = substr(uniqid(), -10);
             $uniqueDlId = "velrider_dl" . $uniqueDlId;
@@ -180,7 +180,7 @@ class CustomerDocumentController extends Controller
                     $result = checkNameMatch($aadharResName, $dlResName);
                     if ($result == 1) {
                         $dlVerificationStatus = true;
-                    }else{
+                    } else {
                         return $this->errorResponse("You cannot upload anyone else's dl");
                     }
                 }
@@ -202,13 +202,13 @@ class CustomerDocumentController extends Controller
                 (strtolower($dlResponseData['code']) == 'verification_failed')
             ) {
                 return $this->errorResponse('Verification Id is Invalid');
-            } else if($dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' && strtolower($dlResponseData['code']) == 'invalid_parameters'){
-                if($dlResponseData['message']){
+            } else if ($dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' && strtolower($dlResponseData['code']) == 'invalid_parameters') {
+                if ($dlResponseData['message']) {
                     return $this->errorResponse($dlResponseData['message']);
-                }else{
+                } else {
                     return $this->errorResponse('Invalid Details');
                 }
-            }else if (
+            } else if (
                 $dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' &&
                 (strtolower($dlResponseData['code']) == 'x-client-id_missing') ||
                 (strtolower($dlResponseData['code']) == 'x-client-secret_value_invalid') ||
@@ -414,7 +414,7 @@ class CustomerDocumentController extends Controller
         if ($docVerificationStatus != '' && strtolower($docVerificationStatus) == 'yes') {
             $customer = Customer::where('customer_id', $customerId)->first();
             if ($dlVerificationStatus == true && $request->document_type == 'dl') {
-                if($dlResName != ''){
+                if ($dlResName != '') {
                     $dlParts = explode(' ', $dlResName);
                     $dlFirstName = $dlParts[0] ?? '';
                     $dlLastName = end($dlParts);
@@ -425,10 +425,10 @@ class CustomerDocumentController extends Controller
                     $customer->dl_doc_verification_cnt += 1;
                     $customer->save();
                 }
-                if($dlProfileLink != ''){
+                if ($dlProfileLink != '') {
                     $response = Http::get($dlProfileLink);
                     if ($response->successful()) {
-                        $fileName = "DL".time() . '.png';
+                        $fileName = "DL" . time() . '.png';
                         $filePath = public_path('images/profile_pictures/' . $fileName);
                         if (!File::exists(public_path('images/profile_pictures/'))) {
                             File::makeDirectory(public_path('images/profile_pictures/'), 0755, true);
@@ -462,7 +462,7 @@ class CustomerDocumentController extends Controller
     }
 
     protected function checkNameMatch($aadharName, $dlName)
-    { 
+    {
         $aadharName = strtolower($aadharName);
         $dlName = strtolower($dlName);
         // OLD CODE
@@ -520,24 +520,24 @@ class CustomerDocumentController extends Controller
         $middleNameStatus = false;
         if (!empty($middleNames1) || !empty($middleNames2)) {
             $middleNames1 = $middleNames1[0] ?? '';
-            $middleNames2 = $middleNames2[0] ?? '';   
+            $middleNames2 = $middleNames2[0] ?? '';
             $middleNameStatus = true;
         }
-        if($middleNameStatus == true){
+        if ($middleNameStatus == true) {
             if (
-                (isSimilar($firstName1, $firstName2) && isSimilar($lastName1, $lastName2)) || 
+                (isSimilar($firstName1, $firstName2) && isSimilar($lastName1, $lastName2)) ||
                 (isSimilar($firstName1, $lastName2) && isSimilar($lastName1, $firstName2)) ||
-                (isSimilar($middleNames1, $firstName2) || isSimilar($middleNames1, $lastName2)) || 
+                (isSimilar($middleNames1, $firstName2) || isSimilar($middleNames1, $lastName2)) ||
                 (isSimilar($middleNames2, $firstName1) || isSimilar($middleNames2, $lastName1))
-            ){
+            ) {
                 return 1;
             }
             return 0;
-        }else{
+        } else {
             if (
                 (isSimilar($firstName1, $firstName2) && isSimilar($lastName1, $lastName2)) || (isSimilar($firstName1, $lastName2) && isSimilar($lastName1, $firstName2))
                 //(isSimilar($firstName1, $firstName2) && isSimilar($lastName1, $firstName2)) || (isSimilar($firstName1, $lastName2) && isSimilar($lastName1, $firstName2))
-            ){
+            ) {
                 return 1;
             }
             return 0;
@@ -576,7 +576,7 @@ class CustomerDocumentController extends Controller
             ->whereNotNull('expiry_date')
             ->whereBetween('expiry_date', [Carbon::now(), Carbon::now()->addMonth()])
             ->first();
-            
+
         if ($existingDocument) {
             if ($existingDocument->is_approved === 'awaiting_approval') {
                 return $this->errorResponse('There is already a document of this type awaiting approval.');
@@ -645,7 +645,7 @@ class CustomerDocumentController extends Controller
                         $customer = Customer::where('customer_id', $user->customer_id)->first();
                         $customer->govt_doc_verification_cnt += 1;
                         $customer->save();
-                        
+
                         $document->doc_status = $customer->documents;
 
                         return $this->successResponse($document, 'Document uploaded successfully.');

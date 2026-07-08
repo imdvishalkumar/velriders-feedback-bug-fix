@@ -44,7 +44,7 @@ class InvoiceCalculationService
     public function calculateInvoiceData(int $bookingId): array
     {
         $booking = RentalBooking::with(['vehicle', 'customer'])->find($bookingId);
-        
+
         if (!$booking) {
             return ['error' => 'Booking not found'];
         }
@@ -52,7 +52,7 @@ class InvoiceCalculationService
         $transactions = BookingTransaction::where('booking_id', $bookingId)->get();
         $vehicleServicePercent = $this->getVehicleServicePercent($booking);
         $bookingGstRate = $this->getBookingGstRate($booking);
-        
+
         // Initialize accumulators with full precision
         $lineItems = [];
         $gstSummary = $this->initializeGstSummary();
@@ -67,7 +67,7 @@ class InvoiceCalculationService
                 $bookingGstRate,
                 $booking
             );
-            
+
             if ($result) {
                 $lineItems = array_merge_recursive($lineItems, $result['lineItems']);
                 $gstSummary = $this->mergeGstSummary($gstSummary, $result['gstSummary']);
@@ -152,7 +152,7 @@ class InvoiceCalculationService
         $totalPaid = $transaction->total_amount ?? 0;
         $convenienceFee = $transaction->convenience_fee ?? 0;
         $discount = $transaction->coupon_discount ?? 0;
-        $timestamp = $transaction->start_date && $transaction->end_date 
+        $timestamp = $transaction->start_date && $transaction->end_date
             ? date('d-m-Y H:i', strtotime($transaction->start_date)) . ' - ' . date('d-m-Y H:i', strtotime($transaction->end_date))
             : '';
 
@@ -163,7 +163,7 @@ class InvoiceCalculationService
         if ($convenienceFee > 0) {
             $cfBase = $convenienceFee / (1 + self::CONVENIENCE_FEE_GST_RATE);
             $cfGst = $convenienceFee - $cfBase;
-            
+
             $result['lineItems']['convenienceFee'] = [
                 'base' => $cfBase,
                 'gst_rate' => self::CONVENIENCE_FEE_GST_RATE * 100,
@@ -171,7 +171,7 @@ class InvoiceCalculationService
                 'discount' => 0.0,
                 'total' => $convenienceFee,
             ];
-            
+
             $result['gstSummary'][18]['rate'] += $cfBase;
             $result['gstSummary'][18]['tax'] += $cfGst;
         }
@@ -179,19 +179,19 @@ class InvoiceCalculationService
         // Solve for Booking Base (B) using reverse calculation
         // Equation: (B - discount) * (1 + bookingGstRate) + (B * vehicleServicePercent/100) * (1 + VEHICLE_SERVICE_GST_RATE) = amountExcludingConvenience
         // Simplify: B * [(1 + bookingGstRate) + (vehicleServicePercent/100 * 1.18)] - discount * (1 + bookingGstRate) = amountExcludingConvenience
-        
+
         $bookingMultiplier = 1 + $bookingGstRate;
         $vehicleServiceMultiplier = ($vehicleServicePercent / 100) * (1 + self::VEHICLE_SERVICE_GST_RATE);
         $totalMultiplier = $bookingMultiplier + $vehicleServiceMultiplier;
-        
+
         // B = (amountExcludingConvenience + discount * bookingMultiplier) / totalMultiplier
         $bookingBase = ($amountExcludingConvenience + ($discount * $bookingMultiplier)) / $totalMultiplier;
-        
+
         // Calculate booking line item
         $bookingTaxable = $bookingBase - $discount;
         $bookingGst = $bookingTaxable * $bookingGstRate;
         $bookingTotal = $bookingTaxable + $bookingGst;
-        
+
         $result['lineItems']['newBooking'] = [
             'base' => $bookingTaxable,  // Rate after discount
             'gst_rate' => $bookingGstRate * 100,
@@ -201,8 +201,8 @@ class InvoiceCalculationService
             'timestamp' => $timestamp,
             'original_base' => $bookingBase,  // Base before discount (for reference)
         ];
-        
-        $gstKey = (int)($bookingGstRate * 100);
+
+        $gstKey = (int) ($bookingGstRate * 100);
         $result['gstSummary'][$gstKey]['rate'] += $bookingTaxable;
         $result['gstSummary'][$gstKey]['tax'] += $bookingGst;
 
@@ -211,7 +211,7 @@ class InvoiceCalculationService
             $vsBase = $bookingBase * ($vehicleServicePercent / 100);
             $vsGst = $vsBase * self::VEHICLE_SERVICE_GST_RATE;
             $vsTotal = $vsBase + $vsGst;
-            
+
             $result['lineItems']['newBookingVehicleService'] = [
                 'base' => $vsBase,
                 'gst_rate' => self::VEHICLE_SERVICE_GST_RATE * 100,
@@ -219,13 +219,13 @@ class InvoiceCalculationService
                 'discount' => 0.0,
                 'total' => $vsTotal,
             ];
-            
+
             $result['gstSummary'][18]['vehicle_commission_rate'] += $vsBase;
             $result['gstSummary'][18]['vehicle_commission_tax'] += $vsGst;
         }
 
         $result['paidTotal'] = $totalPaid;
-        
+
         Log::info("NEW BOOKING - Reverse Calculation:", [
             'total_paid' => $totalPaid,
             'convenience_fee' => $convenienceFee,
@@ -267,9 +267,9 @@ class InvoiceCalculationService
         $bookingMultiplier = 1 + $bookingGstRate;
         $vehicleServiceMultiplier = ($vehicleServicePercent / 100) * (1 + self::VEHICLE_SERVICE_GST_RATE);
         $totalMultiplier = $bookingMultiplier + $vehicleServiceMultiplier;
-        
+
         $extensionBase = ($amountExcludingConvenience + ($discount * $bookingMultiplier)) / $totalMultiplier;
-        
+
         $extensionTaxable = $extensionBase - $discount;
         $extensionGst = $extensionTaxable * $bookingGstRate;
         $extensionTotal = $extensionTaxable + $extensionGst;
@@ -283,7 +283,7 @@ class InvoiceCalculationService
             'timestamp' => $timestamp,
         ];
 
-        $gstKey = (int)($bookingGstRate * 100);
+        $gstKey = (int) ($bookingGstRate * 100);
         $result['gstSummary'][$gstKey]['rate'] += $extensionTaxable;
         $result['gstSummary'][$gstKey]['tax'] += $extensionGst;
 
@@ -292,7 +292,7 @@ class InvoiceCalculationService
             $vsBase = $extensionBase * ($vehicleServicePercent / 100);
             $vsGst = $vsBase * self::VEHICLE_SERVICE_GST_RATE;
             $vsTotal = $vsBase + $vsGst;
-            
+
             $result['lineItems']['extensionVehicleServices'][] = [
                 'base' => $vsBase,
                 'gst_rate' => self::VEHICLE_SERVICE_GST_RATE * 100,
@@ -300,7 +300,7 @@ class InvoiceCalculationService
                 'discount' => 0.0,
                 'total' => $vsTotal,
             ];
-            
+
             $result['gstSummary'][18]['vehicle_commission_rate'] += $vsBase;
             $result['gstSummary'][18]['vehicle_commission_tax'] += $vsGst;
         }
@@ -341,7 +341,7 @@ class InvoiceCalculationService
 
         // Total additional charges before tax
         $totalAdditional = $lateReturn + $exceededKm + $additionalCharges;
-        
+
         if ($totalAdditional <= 0) {
             return $result;
         }
@@ -349,17 +349,17 @@ class InvoiceCalculationService
         // For completion, use stored tax amount to work backwards
         // Total = Base + Base*VSPercent + Tax + VSPercent*VSTax
         // We need to solve for Base given the total amount
-        
+
         $totalPaid = $totalAdditional + $taxAmt;
-        
+
         // Calculate using reverse approach
         // totalPaid = base*(1 + gstRate) + base*vsPercent*(1 + vsGstRate)
         $completionGstRate = self::LATE_RETURN_GST_RATE;  // 5% for late return charges
-        
+
         $baseMultiplier = 1 + $completionGstRate;
         $vsMultiplier = ($vehicleServicePercent / 100) * (1 + self::VEHICLE_SERVICE_GST_RATE);
         $totalMultiplier = $baseMultiplier + $vsMultiplier;
-        
+
         $completionBase = $totalPaid / $totalMultiplier;
         $completionGst = $completionBase * $completionGstRate;
         $completionTotal = $completionBase + $completionGst;
@@ -376,7 +376,7 @@ class InvoiceCalculationService
             'additional_charges' => $additionalCharges,
         ];
 
-        $gstKey = (int)($completionGstRate * 100);
+        $gstKey = (int) ($completionGstRate * 100);
         $result['gstSummary'][$gstKey]['rate'] += $completionBase;
         $result['gstSummary'][$gstKey]['tax'] += $completionGst;
 
@@ -385,7 +385,7 @@ class InvoiceCalculationService
             $vsBase = $completionBase * ($vehicleServicePercent / 100);
             $vsGst = $vsBase * self::VEHICLE_SERVICE_GST_RATE;
             $vsTotal = $vsBase + $vsGst;
-            
+
             $result['lineItems']['completionVehicleService'] = [
                 'base' => $vsBase,
                 'gst_rate' => self::VEHICLE_SERVICE_GST_RATE * 100,
@@ -393,7 +393,7 @@ class InvoiceCalculationService
                 'discount' => 0.0,
                 'total' => $vsTotal,
             ];
-            
+
             $result['gstSummary'][18]['vehicle_commission_rate'] += $vsBase;
             $result['gstSummary'][18]['vehicle_commission_tax'] += $vsGst;
         }
@@ -422,21 +422,21 @@ class InvoiceCalculationService
         $taxAmt = $transaction->tax_amt ?? 0;
         $timestamp = $transaction->timestamp ? date('d-m-Y H:i', strtotime($transaction->timestamp)) : '';
         $isPaid = $transaction->paid == 1;
-        
+
         if ($totalAmount <= 0) {
             return $result;
         }
 
         // Penalty total = totalAmount + taxAmt
         $penaltyGrandTotal = $totalAmount + $taxAmt;
-        
+
         // Reverse calculate
         $penaltyGstRate = $bookingGstRate;  // Use same rate as booking
-        
+
         $baseMultiplier = 1 + $penaltyGstRate;
         $vsMultiplier = ($vehicleServicePercent / 100) * (1 + self::VEHICLE_SERVICE_GST_RATE);
         $totalMultiplier = $baseMultiplier + $vsMultiplier;
-        
+
         $penaltyBase = $penaltyGrandTotal / $totalMultiplier;
         $penaltyGst = $penaltyBase * $penaltyGstRate;
         $penaltyTotal = $penaltyBase + $penaltyGst;
@@ -450,7 +450,7 @@ class InvoiceCalculationService
             'timestamp' => $timestamp,
         ];
 
-        $gstKey = (int)($penaltyGstRate * 100);
+        $gstKey = (int) ($penaltyGstRate * 100);
 
         // Vehicle service on penalty
         $vsItem = null;
@@ -458,7 +458,7 @@ class InvoiceCalculationService
             $vsBase = $penaltyBase * ($vehicleServicePercent / 100);
             $vsGst = $vsBase * self::VEHICLE_SERVICE_GST_RATE;
             $vsTotal = $vsBase + $vsGst;
-            
+
             $vsItem = [
                 'base' => $vsBase,
                 'gst_rate' => self::VEHICLE_SERVICE_GST_RATE * 100,
@@ -494,9 +494,12 @@ class InvoiceCalculationService
      */
     public function getVehicleServicePercent(RentalBooking $booking): float
     {
+        if (isset($booking->commission_percent) && $booking->commission_percent !== null) {
+            return (float) $booking->commission_percent;
+        }
         $vehicle = $booking->vehicle;
         if ($vehicle) {
-            return (float)($vehicle->commission_percent ?? 0);
+            return (float) ($vehicle->commission_percent ?? 0);
         }
         return 0.0;
     }
@@ -550,10 +553,10 @@ class InvoiceCalculationService
     ): array {
         // Calculate sum of all line item totals
         $calculatedTotal = $this->sumAllLineItems($lineItems);
-        
+
         // Calculate rounding difference
         $difference = round($grandTotal, 2) - round($calculatedTotal, 2);
-        
+
         // If difference exists, apply to booking total (largest item typically)
         if (abs($difference) > 0.001 && isset($lineItems['newBooking'])) {
             $lineItems['newBooking']['total'] += $difference;
@@ -580,7 +583,7 @@ class InvoiceCalculationService
     private function sumAllLineItems(array $lineItems): float
     {
         $total = 0.0;
-        
+
         // Single items
         $singleItems = ['newBooking', 'newBookingVehicleService', 'convenienceFee', 'completion', 'completionVehicleService'];
         foreach ($singleItems as $key) {
@@ -588,7 +591,7 @@ class InvoiceCalculationService
                 $total += $lineItems[$key]['total'];
             }
         }
-        
+
         // Array items
         $arrayItems = ['extensions', 'extensionVehicleServices', 'paidPenalties', 'paidPenaltyServices'];
         foreach ($arrayItems as $key) {
@@ -600,7 +603,7 @@ class InvoiceCalculationService
                 }
             }
         }
-        
+
         return $total;
     }
 
@@ -826,25 +829,25 @@ class InvoiceCalculationService
     public function buildPenaltyText(array $completion): string
     {
         $penaltyText = '';
-        
+
         if (!empty($completion['late_return']) && $completion['late_return'] > 0) {
             $penaltyText .= ' Late Return - ' . round($completion['late_return'], 2);
         }
-        
+
         if (!empty($completion['exceeded_km']) && $completion['exceeded_km'] > 0) {
             if (!empty($penaltyText)) {
                 $penaltyText .= ' | ';
             }
             $penaltyText .= 'Extra KM - ' . round($completion['exceeded_km'], 2);
         }
-        
+
         if (!empty($completion['additional_charges']) && $completion['additional_charges'] > 0) {
             if (!empty($penaltyText)) {
                 $penaltyText .= ' | ';
             }
             $penaltyText .= 'Additional Charges - ' . round($completion['additional_charges'], 2);
         }
-        
+
         return $penaltyText;
     }
 }

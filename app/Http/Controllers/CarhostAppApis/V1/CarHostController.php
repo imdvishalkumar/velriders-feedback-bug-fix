@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\CarhostAppApis\V1;
 
-use App\Http\Controllers\Controller; 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Validator;
@@ -12,7 +12,16 @@ use Illuminate\Support\Facades\Log;
 //     CarHost, CarEligibility, LoginToken, UserDevice, Customer, CarHostBank
 // };
 use App\Models\{
-    CarHost, CarEligibility, LoginToken, UserDevice, Customer, CarHostBank,RentalBooking,CompanyDetail,BookingTransaction, CarHostPickupLocation
+    CarHost,
+    CarEligibility,
+    LoginToken,
+    UserDevice,
+    Customer,
+    CarHostBank,
+    RentalBooking,
+    CompanyDetail,
+    BookingTransaction,
+    CarHostPickupLocation
 };
 use App\Services\SmsService;
 use App\Services\Invoice\InvoiceCalculationService;
@@ -47,11 +56,11 @@ class CarHostController extends Controller
         try {
             // Load booking with relationships
             $data = RentalBooking::with([
-                'vehicle.model.manufacturer', 
-                'vehicle.model.category', 
-                'vehicle.properties', 
-                'vehicle.features', 
-                'vehicle.images', 
+                'vehicle.model.manufacturer',
+                'vehicle.model.category',
+                'vehicle.properties',
+                'vehicle.features',
+                'vehicle.images',
                 'customer'
             ])->where('booking_id', $bookingId)->first();
 
@@ -60,7 +69,7 @@ class CarHostController extends Controller
             }
 
             // Get vehicle service percentage from DB
-            $vehicleServicePercent = $data->vehicle->commission_percent ?? 0;
+            $vehicleServicePercent = $data->commission_percent ?? $data->vehicle->commission_percent ?? 0;
 
             // Get booking GST rate based on customer type
             // Use app() to resolve dependencies for the instance
@@ -82,7 +91,7 @@ class CarHostController extends Controller
         }
     }
 
-     /**
+    /**
      * Generate booking invoice PDF with accurate calculations
      * 
      * BUSINESS RULES:
@@ -105,11 +114,11 @@ class CarHostController extends Controller
     {
         // Load booking with relationships
         $data = RentalBooking::with([
-            'vehicle.model.manufacturer', 
-            'vehicle.model.category', 
-            'vehicle.properties', 
-            'vehicle.features', 
-            'vehicle.images', 
+            'vehicle.model.manufacturer',
+            'vehicle.model.category',
+            'vehicle.properties',
+            'vehicle.features',
+            'vehicle.images',
             'customer'
         ])->where('booking_id', $bookingId)->first();
 
@@ -119,15 +128,23 @@ class CarHostController extends Controller
 
         // Get company details
         $companyDetails = CompanyDetail::select(
-            'id', 'address', 'phone', 'alt_phone', 'email', 
-            'gst_no', 'pan_no', 'bank_name', 'bank_account_no', 'bank_ifsc_code'
+            'id',
+            'address',
+            'phone',
+            'alt_phone',
+            'email',
+            'gst_no',
+            'pan_no',
+            'bank_name',
+            'bank_account_no',
+            'bank_ifsc_code'
         )->first();
 
         // Determine GST type (CGST/SGST vs IGST)
         $gstStatus = $this->determineGstStatus($data);
 
         // Get vehicle service percentage from DB
-        $vehicleServicePercent = $data->vehicle->commission_percent ?? 0;
+        $vehicleServicePercent = $data->commission_percent ?? $data->vehicle->commission_percent ?? 0;
 
         // Get booking GST rate based on customer type
         $bookingGstRate = $this->getBookingGstRate($data);
@@ -178,14 +195,36 @@ class CarHostController extends Controller
         // Generate PDF
         $filename = 'booking-invoice-' . $bookingId . '.pdf';
         $pdf = PDF::loadView('carhost-booking-invoice', compact(
-            'data', 'companyDetails', 'newBooking', 'extension', 'completion',
-            'totalAmt', 'totalTax', 'convenienceFees', 'cFees', 'rateTotal',
-            'penaltyText', 'gstStatus', 'completionDisplay', 'extraKmString',
-            'newBookingTimeStamp', 'completionNewBooking', 'adminPenaltiesDue',
-            'newBookingVehicleServiceFees', 'extensionVehicleServiceFees',
-            'completionVehicleServiceFees', 'paidPenalties', 'paidPenaltyServiceCharge',
-            'duePenalties', 'duePenaltyServiceCharge', 'paidAdjustments', 'dueAdjustments',
-            'amountDue', 'groupedTotals', 'displayTotal', 'roundOffs'
+            'data',
+            'companyDetails',
+            'newBooking',
+            'extension',
+            'completion',
+            'totalAmt',
+            'totalTax',
+            'convenienceFees',
+            'cFees',
+            'rateTotal',
+            'penaltyText',
+            'gstStatus',
+            'completionDisplay',
+            'extraKmString',
+            'newBookingTimeStamp',
+            'completionNewBooking',
+            'adminPenaltiesDue',
+            'newBookingVehicleServiceFees',
+            'extensionVehicleServiceFees',
+            'completionVehicleServiceFees',
+            'paidPenalties',
+            'paidPenaltyServiceCharge',
+            'duePenalties',
+            'duePenaltyServiceCharge',
+            'paidAdjustments',
+            'dueAdjustments',
+            'amountDue',
+            'groupedTotals',
+            'displayTotal',
+            'roundOffs'
         ))->setPaper('A3');
 
         return $pdf->stream('booking-invoice.pdf');
@@ -239,17 +278,17 @@ class CarHostController extends Controller
      * @return array
      */
     private function calculateInvoiceFromGrandTotal(
-        int $bookingId, 
-        float $vehicleServicePercent, 
+        int $bookingId,
+        float $vehicleServicePercent,
         float $bookingGstRate,
         RentalBooking $booking
     ): array {
         // Initialize result arrays
         $result = $this->initializeInvoiceResult();
-        
+
         // Get all transactions
         $transactions = BookingTransaction::where('booking_id', $bookingId)->get();
-        
+
         if ($transactions->isEmpty()) {
             return $result;
         }
@@ -268,19 +307,19 @@ class CarHostController extends Controller
         // - Convenience fees (to subtract before solving B)
         // - Transaction data for later processing
         // ========================================================================
-        
+
         $grandTotal = 0.0;
         $convenienceFeeTotal = 0.0;
         $completionTotal = 0.0;
         $completionVehicleServiceTotal = 0.0;
         $discount = 0.0;
-        
+
         // Store transaction references for Phase 3
         $newBookingTransaction = null;
         $extensionTransactions = [];
         $completionTransaction = null;
         $penaltyTransactions = [];
-        
+
         foreach ($transactions as $transaction) {
             switch ($transaction->type) {
                 case 'new_booking':
@@ -295,7 +334,7 @@ class CarHostController extends Controller
                         $newBookingTransaction = $transaction;
                     }
                     break;
-                    
+
                 case 'extension':
                     if ($transaction->paid == 1) {
                         // Add to Grand Total
@@ -306,32 +345,32 @@ class CarHostController extends Controller
                         $extensionTransactions[] = $transaction;
                     }
                     break;
-                    
+
                 case 'completion':
                     if ($transaction->paid == 1) {
                         // Add to Grand Total (use amount_to_pay, NOT total_amount which is NULL)
                         // DO NOT add vehicle service - it's calculated, not paid separately
                         $grandTotal += $transaction->amount_to_pay ?? 0;
-                        
+
                         // REVERSE CALCULATE completion charges from late_return base
                         // DO NOT use DB values for vehicle service - they may be incorrect
-                        $lateReturnBase = ($transaction->late_return ?? 0) 
-                                        + ($transaction->exceeded_km_limit ?? 0) 
-                                        + ($transaction->additional_charges ?? 0);
-                        
+                        $lateReturnBase = ($transaction->late_return ?? 0)
+                            + ($transaction->exceeded_km_limit ?? 0)
+                            + ($transaction->additional_charges ?? 0);
+
                         // Completion total = base × (1 + GST rate)
                         $completionTotal = $lateReturnBase * (1 + $lateReturnGstRate);
-                        
+
                         // Completion VS = base × (VS% / 100) × (1 + VS GST rate)
-                        $completionVehicleServiceTotal = $lateReturnBase 
-                                                       * ($vehicleServicePercent / 100) 
-                                                       * (1 + $vehicleServiceGstRate);
-                        
+                        $completionVehicleServiceTotal = $lateReturnBase
+                            * ($vehicleServicePercent / 100)
+                            * (1 + $vehicleServiceGstRate);
+
                         // Store for Phase 3
                         $completionTransaction = $transaction;
                     }
                     break;
-                    
+
                 case 'penalty':
                     // Penalty totals are handled separately in processPenaltyTransaction
                     $penaltyTransactions[] = $transaction;
@@ -363,24 +402,24 @@ class CarHostController extends Controller
         // Then solve for Booking Base (B) using the equation:
         // (B - discount) × (1 + bookingGstRate) + (B × vsPercent/100) × (1 + vsGstRate) = remaining
         // ========================================================================
-        
+
         // Calculate remaining for booking reverse calculation
         $remaining = $grandTotal - $convenienceFeeTotal - $completionTotal - $completionVehicleServiceTotal;
-        
+
         // Solve for Booking Base (B)
         // Equation: (B - discount) × 1.05 + (B × vsPercent/100) × 1.18 = remaining
         // Rearranged: B × [1.05 + (vsPercent/100 × 1.18)] = remaining + discount × 1.05
         $bookingMultiplier = 1 + $bookingGstRate;
         $vsMultiplier = ($vehicleServicePercent / 100) * (1 + $vehicleServiceGstRate);
         $totalMultiplier = $bookingMultiplier + $vsMultiplier;
-        
+
         // Solve for booking_taxable first
         $bookingTaxableSolved = $remaining / $totalMultiplier;
-        
+
         // CRITICAL: Booking Base (B) = booking_taxable + discount. Do NOT modify after this point.
         $bookingBase = $bookingTaxableSolved + $discount;
-        
-                
+
+
         Log::info("PHASE 2 - Reverse calculation:", [
             'remaining' => $remaining,
             'bookingMultiplier' => $bookingMultiplier,
@@ -396,7 +435,7 @@ class CarHostController extends Controller
         // Use the frozen booking base (B) to calculate all line item values.
         // Process each transaction type to build display arrays.
         // ========================================================================
-        
+
         // Process new_booking (if exists)
         if ($newBookingTransaction) {
             $this->buildNewBookingLineItems(
@@ -410,7 +449,7 @@ class CarHostController extends Controller
                 $result
             );
         }
-        
+
         // Process extensions
         foreach ($extensionTransactions as $extTransaction) {
             $this->buildExtensionLineItems(
@@ -422,7 +461,7 @@ class CarHostController extends Controller
                 $result
             );
         }
-        
+
         // Process completion (if exists)
         if ($completionTransaction) {
             $this->buildCompletionLineItems(
@@ -434,7 +473,7 @@ class CarHostController extends Controller
                 $booking
             );
         }
-        
+
         // Process penalties
         foreach ($penaltyTransactions as $penaltyTransaction) {
             $this->processPenaltyTransaction(
@@ -459,7 +498,7 @@ class CarHostController extends Controller
             $result['groupedTotals'][$key]['vehicle_commission_rate'] = round($totals['vehicle_commission_rate'], 2);
             $result['groupedTotals'][$key]['vehicle_commission_tax'] = round($totals['vehicle_commission_tax'], 2);
         }
-        
+
         // Ensure totalAmt is sum of Displayed Amount values (as per Host requirement)
         // Previous logic (Phase 1) set totalAmt to Grand Total (Inc Tax).
         // Host Invoice requires Grand Total = Sum(Amount Column).
@@ -469,17 +508,17 @@ class CarHostController extends Controller
         // amountDue is calculated as difference, but if totalAmt changes, amountDue might need adjustment?
         // Actually, amountDue calculation logic earlier subtracts PAID amount from totalAmt.
         // If totalAmt changes definition, amountDue logic is broken.
-        
+
         // Wait. User said "grand total should be sum of amount".
         // If Amount is Rate - Discount (Taxable), then Grand Total is Sum Taxable.
         // Amount Due = Grand Total - Paid Amount ??
         // Paid Amount = Taxable + Tax.
         // So Amount Due would likely be negative if we compare Taxable Sum vs Paid (Inc Tax).
-        
+
         // Let's assume for now simply setting totalAmt = displayTotal fulfills "grand total should be sum of amount".
         // The Payment/Due logic might rely on totalAmt being the INVOICE TOTAL.
         // If host invoice is Tax Exclusive, then Invoice Total = Taxable Total.
-        
+
         return $result;
     }
 
@@ -503,11 +542,11 @@ class CarHostController extends Controller
         // Get transaction's own values
         $grandTotal = $transaction->total_amount ?? 0;
         $convenienceFee = $transaction->convenience_fee ?? 0;
-        
+
         // Build timestamp
         $result['newBookingTimeStamp'] = '';
         if ($transaction->start_date && $transaction->end_date) {
-            $result['newBookingTimeStamp'] = date('d-m-Y H:i', strtotime($transaction->start_date)) 
+            $result['newBookingTimeStamp'] = date('d-m-Y H:i', strtotime($transaction->start_date))
                 . ' - ' . date('d-m-Y H:i', strtotime($transaction->end_date));
         }
 
@@ -515,7 +554,7 @@ class CarHostController extends Controller
         if ($convenienceFee > 0) {
             $cfBase = $convenienceFee / (1 + $convenienceFeeGstRate);
             $cfGst = $convenienceFee - $cfBase;
-            
+
             $result['cFees'] = [
                 'trip_amount' => number_format($cfBase, 2),
                 'tax_percent' => number_format($convenienceFeeGstRate * 100, 2),
@@ -523,11 +562,11 @@ class CarHostController extends Controller
                 'coupon_discount' => number_format(0, 2),
                 'total_amount' => number_format($convenienceFee, 2),
             ];
-            
+
             $result['convenienceFees'] = $convenienceFee;
             $result['rateTotal'] += $cfBase;
             $result['totalTax'] += $cfGst;
-            
+
             $result['groupedTotals'][18]['rate'] += $cfBase;
             $result['groupedTotals'][18]['tax'] += $cfGst;
         }
@@ -535,7 +574,7 @@ class CarHostController extends Controller
         // REVERSE CALCULATE booking base from this transaction's total_amount
         // Remove convenience fee to get remaining amount for booking charges
         $remaining = $grandTotal - $convenienceFee;
-        
+
         // Solve for Booking Taxable (T = B - discount)
         // Equation: T × (1 + bookingGstRate) + T × vsPercent/100 × (1 + vsGstRate) = remaining
         // Simplified: T × [(1 + bookingGstRate) + vsPercent/100 × (1 + vsGstRate)] = remaining
@@ -543,17 +582,17 @@ class CarHostController extends Controller
         $bookingMultiplier = 1 + $bookingGstRate;
         $vsMultiplier = ($vehicleServicePercent / 100) * (1 + $vehicleServiceGstRate);
         $totalMultiplier = $bookingMultiplier + $vsMultiplier;
-        
+
         // Solve for booking taxable, then derive base
         $bookingTaxable = $remaining / $totalMultiplier;
         $bookingBase = $bookingTaxable + $discount;
         $bookingRate = $bookingBase;
-        
+
         $bookingGst = $bookingTaxable * $bookingGstRate;
         $bookingTotal = $bookingTaxable + $bookingGst;
-        
-        $gstPercentInt = (int)($bookingGstRate * 100);
-        
+
+        $gstPercentInt = (int) ($bookingGstRate * 100);
+
         $result['newBooking'] = [
             'trip_amount' => number_format($bookingRate, 2), // Rate column (unchanged)
             'tax_percent' => number_format($gstPercentInt, 2),
@@ -561,11 +600,11 @@ class CarHostController extends Controller
             'coupon_discount' => number_format($discount, 2), // Discount column (unchanged)
             'total_amount' => number_format($bookingTaxable, 2), // Amount = Rate - Discount (without GST)
         ];
-        
+
         $result['rateTotal'] += $bookingTaxable;
         $result['totalTax'] += $bookingGst;
         $result['displayTotal'] += $bookingTaxable; // Add to sum of displayed Amount values
-        
+
         $result['groupedTotals'][$gstPercentInt]['rate'] += $bookingTaxable;
         $result['groupedTotals'][$gstPercentInt]['tax'] += $bookingGst;
 
@@ -575,7 +614,7 @@ class CarHostController extends Controller
             $vsBase = $bookingTaxable * ($vehicleServicePercent / 100);
             $vsGst = $vsBase * $vehicleServiceGstRate;
             $vsTotal = $vsBase + $vsGst;
-            
+
             $result['newBookingVehicleServiceFees'] = [
                 'trip_amount' => number_format($vsBase, 2),
                 'tax_percent' => number_format($vehicleServiceGstRate * 100, 2),
@@ -583,10 +622,10 @@ class CarHostController extends Controller
                 'coupon_discount' => number_format(0, 2),
                 'total_amount' => number_format($vsTotal, 2),
             ];
-            
+
             $result['rateTotal'] += $vsBase;
             $result['totalTax'] += $vsGst;
-            
+
             $result['groupedTotals'][18]['vehicle_commission_rate'] += $vsBase;
             $result['groupedTotals'][18]['vehicle_commission_tax'] += $vsGst;
         }
@@ -617,19 +656,19 @@ class CarHostController extends Controller
         $bookingMultiplier = 1 + $bookingGstRate;
         $vsMultiplier = ($vehicleServicePercent / 100) * (1 + $vehicleServiceGstRate);
         $totalMultiplier = $bookingMultiplier + $vsMultiplier;
-        
+
         // Solve for extension_taxable
         $extensionTaxableSolved = $remaining / $totalMultiplier;
-        
+
         // Extension Base = extension_taxable + discount
         $extensionBase = $extensionTaxableSolved + $discount;
         $extensionRate = $extensionBase;  // IMMUTABLE
-        
+
         $extensionTaxable = $extensionRate - $discount;
         $extensionGst = $extensionTaxable * $bookingGstRate;
         $extensionTotal = $extensionTaxable + $extensionGst;
-        
-        $gstPercentInt = (int)($bookingGstRate * 100);
+
+        $gstPercentInt = (int) ($bookingGstRate * 100);
 
         $result['extension']['timestamp'][] = $timestamp;
         $result['extension']['trip_amount'][] = number_format($extensionRate, 2);
@@ -641,7 +680,7 @@ class CarHostController extends Controller
         $result['rateTotal'] += $extensionTaxable;
         $result['totalTax'] += $extensionGst;
         $result['displayTotal'] += $extensionTaxable; // Add to sum of displayed Amount values
-        
+
         $result['groupedTotals'][$gstPercentInt]['rate'] += $extensionTaxable;
         $result['groupedTotals'][$gstPercentInt]['tax'] += $extensionGst;
 
@@ -650,16 +689,16 @@ class CarHostController extends Controller
             $vsBase = $extensionTaxable * ($vehicleServicePercent / 100);
             $vsGst = $vsBase * $vehicleServiceGstRate;
             $vsTotal = $vsBase + $vsGst;
-            
+
             $result['extensionVehicleServiceFees']['trip_amount'][] = number_format($vsBase, 2);
             $result['extensionVehicleServiceFees']['tax_percent'][] = number_format($vehicleServiceGstRate * 100, 2);
             $result['extensionVehicleServiceFees']['tax_amount'][] = number_format($vsGst, 2);
             $result['extensionVehicleServiceFees']['coupon_discount'][] = number_format(0, 2);
             $result['extensionVehicleServiceFees']['total_amount'][] = number_format($vsTotal, 2);
-            
+
             $result['rateTotal'] += $vsBase;
             $result['totalTax'] += $vsGst;
-            
+
             $result['groupedTotals'][18]['vehicle_commission_rate'] += $vsBase;
             $result['groupedTotals'][18]['vehicle_commission_tax'] += $vsGst;
         }
@@ -668,11 +707,11 @@ class CarHostController extends Controller
         if ($convenienceFee > 0) {
             $cfBase = $convenienceFee / (1 + $convenienceFeeGstRate);
             $cfGst = $convenienceFee - $cfBase;
-            
+
             $result['convenienceFees'] += $convenienceFee;
             $result['rateTotal'] += $cfBase;
             $result['totalTax'] += $cfGst;
-            
+
             $result['groupedTotals'][18]['rate'] += $cfBase;
             $result['groupedTotals'][18]['tax'] += $cfGst;
         }
@@ -707,7 +746,8 @@ class CarHostController extends Controller
             $penaltyText .= ' Late Return - ' . round($lateReturn, 2);
         }
         if ($exceededKm > 0) {
-            if (!empty($penaltyText)) $penaltyText .= ' | ';
+            if (!empty($penaltyText))
+                $penaltyText .= ' | ';
             $extraKmString = '';
             if ($booking && is_countable($booking->price_summary) && count($booking->price_summary) > 0) {
                 foreach ($booking->price_summary as $val) {
@@ -721,14 +761,15 @@ class CarHostController extends Controller
             $penaltyText .= $extraKmString ?: 'Extra KM - ' . round($exceededKm, 2);
         }
         if ($additionalCharges > 0) {
-            if (!empty($penaltyText)) $penaltyText .= ' | ';
+            if (!empty($penaltyText))
+                $penaltyText .= ' | ';
             $penaltyText .= 'Additional Charges - ' . $additionalCharges;
         }
         $result['penaltyText'] = $penaltyText;
 
         // Total completion amount (base from DB)
         $totalCompletionBaseDb = $lateReturn + $exceededKm + $additionalCharges;
-        
+
         if ($totalCompletionBaseDb <= 0) {
             return;
         }
@@ -743,30 +784,30 @@ class CarHostController extends Controller
         // If amount_to_pay is present (paid transaction), use it.
         // Otherwise use the calculated total.
         $targetTotal = $transaction->amount_to_pay > 0 ? $transaction->amount_to_pay : ($transaction->total_amount ?? 0);
-        
+
         // Calculate multipliers
         $completionMultiplier = 1 + $lateReturnGstRate;
         $vsMultiplier = ($vehicleServicePercent / 100) * (1 + $vehicleServiceGstRate);
         $totalMultiplier = $completionMultiplier + $vsMultiplier;
-        
+
         // If we have a valid paid amount that differs from the calculated liability, 
         // we reverse calculate the base to match the payment
         // Calculated Liability = BaseDb * TotalMultiplier
         $calculatedLiability = $totalCompletionBaseDb * $totalMultiplier;
-        
+
         // Use a small threshold for float comparison
         if ($targetTotal > 0 && abs($targetTotal - $calculatedLiability) > 0.01) {
-             // REVERSE CALCULATE
-             $completionBase = $targetTotal / $totalMultiplier;
+            // REVERSE CALCULATE
+            $completionBase = $targetTotal / $totalMultiplier;
         } else {
-             // FORWARD CALCULATE (Standard)
-             $completionBase = $totalCompletionBaseDb;
+            // FORWARD CALCULATE (Standard)
+            $completionBase = $totalCompletionBaseDb;
         }
 
         $completionGst = $completionBase * $lateReturnGstRate;
         $completionTotal = $completionBase + $completionGst;
 
-        $gstPercentInt = (int)($lateReturnGstRate * 100);
+        $gstPercentInt = (int) ($lateReturnGstRate * 100);
 
         $result['completion'] = [
             'trip_amount' => number_format($completionBase, 2),
@@ -780,7 +821,7 @@ class CarHostController extends Controller
         $result['rateTotal'] += $completionBase;
         $result['totalTax'] += $completionGst;
         $result['displayTotal'] += $completionBase; // Add to sum of displayed Amount values
-        
+
         $result['groupedTotals'][$gstPercentInt]['rate'] += $completionBase;
         $result['groupedTotals'][$gstPercentInt]['tax'] += $completionGst;
 
@@ -789,7 +830,7 @@ class CarHostController extends Controller
             $vsBase = $completionBase * ($vehicleServicePercent / 100);
             $vsGst = $vsBase * $vehicleServiceGstRate;
             $vsTotal = $vsBase + $vsGst;
-            
+
             $result['completionVehicleServiceFees'] = [
                 'trip_amount' => number_format($vsBase, 2),
                 'tax_percent' => number_format($vehicleServiceGstRate * 100, 2),
@@ -797,10 +838,10 @@ class CarHostController extends Controller
                 'coupon_discount' => number_format(0, 2),
                 'total_amount' => number_format($vsTotal, 2),
             ];
-            
+
             $result['rateTotal'] += $vsBase;
             $result['totalTax'] += $vsGst;
-            
+
             $result['groupedTotals'][18]['vehicle_commission_rate'] += $vsBase;
             $result['groupedTotals'][18]['vehicle_commission_tax'] += $vsGst;
         }
@@ -885,16 +926,16 @@ class CarHostController extends Controller
 
         // Reverse calculate penalty base
         $penaltyGrandTotal = $totalAmount + $taxAmt;
-        
+
         $baseMultiplier = 1 + $bookingGstRate;
         $vsMultiplier = ($vehicleServicePercent / 100) * (1 + $vehicleServiceGstRate);
         $totalMultiplier = $baseMultiplier + $vsMultiplier;
-        
+
         $penaltyBase = $penaltyGrandTotal / $totalMultiplier;
         $penaltyGst = $penaltyBase * $bookingGstRate;
         $penaltyTotal = $penaltyBase + $penaltyGst;
-        
-        $gstPercentInt = (int)($bookingGstRate * 100);
+
+        $gstPercentInt = (int) ($bookingGstRate * 100);
 
         // Vehicle service
         $vsBase = 0;
@@ -926,14 +967,14 @@ class CarHostController extends Controller
 
             // NOTE: Penalties are already included in totalAmt from Phase 1 (grandTotal)
             // DO NOT add again here to avoid double counting
-            
+
             // Track GST summary
             $result['rateTotal'] += $penaltyBase + $vsBase;
             $result['totalTax'] += $penaltyGst + $vsGst;
-            
+
             $result['groupedTotals'][$gstPercentInt]['rate'] += $penaltyBase;
             $result['groupedTotals'][$gstPercentInt]['tax'] += $penaltyGst;
-            
+
             if ($vsBase > 0) {
                 $result['groupedTotals'][18]['vehicle_commission_rate'] += $vsBase;
                 $result['groupedTotals'][18]['vehicle_commission_tax'] += $vsGst;
@@ -986,16 +1027,16 @@ class CarHostController extends Controller
         $gstPercentInt = (int) ($bookingGstRate * 100);
 
         $bucket = $isPaid ? 'paidAdjustments' : 'dueAdjustments';
-        $result[$bucket]['timestamp'][]       = $timestamp;
-        $result[$bucket]['trip_amount'][]     = number_format($adjBase, 2);
-        $result[$bucket]['tax_percent'][]     = number_format($gstPercentInt, 2);
-        $result[$bucket]['tax_amount'][]      = number_format($adjGst, 2);
+        $result[$bucket]['timestamp'][] = $timestamp;
+        $result[$bucket]['trip_amount'][] = number_format($adjBase, 2);
+        $result[$bucket]['tax_percent'][] = number_format($gstPercentInt, 2);
+        $result[$bucket]['tax_amount'][] = number_format($adjGst, 2);
         $result[$bucket]['coupon_discount'][] = number_format(0, 2);
-        $result[$bucket]['total_amount'][]    = number_format($adjBase, 2);
+        $result[$bucket]['total_amount'][] = number_format($adjBase, 2);
 
         $result['displayTotal'] += $adjBase;
-        $result['rateTotal']    += $adjBase;
-        $result['totalTax']     += $adjGst;
+        $result['rateTotal'] += $adjBase;
+        $result['totalTax'] += $adjGst;
 
         $result['groupedTotals'][$gstPercentInt]['rate'] += $adjBase;
         $result['groupedTotals'][$gstPercentInt]['tax'] += $adjGst;
@@ -1038,7 +1079,7 @@ class CarHostController extends Controller
     //                 // Amount = Rate - Discount (no GST subtraction for CarHost invoice)
     //                 $displayedAmount = $rate - $value->coupon_discount;
     //                 $newBooking['total_amount'] = number_format($displayedAmount, 2);
-                    
+
     //                 // Add displayed amount to totalAmt
     //                 $totalAmt += $displayedAmount;
     //                 // rateTotal = sum of (Rate - Discount) for each item
@@ -1057,7 +1098,7 @@ class CarHostController extends Controller
     //                 // Amount = Rate - Discount (no GST subtraction for CarHost invoice)
     //                 $displayedAmount = $rate - $value->coupon_discount;
     //                 $extension['total_amount'][] = number_format($displayedAmount, 2);
-                    
+
     //                 // Add displayed amount to totalAmt
     //                 $totalAmt += $displayedAmount;
     //                 // rateTotal = sum of (Rate - Discount) for each item
@@ -1171,7 +1212,7 @@ class CarHostController extends Controller
     //         $rateTotal = round($rateTotal, 2);
     //         $totalAmt = round($totalAmt, 2);
     //     }
-        
+
     //     // Fetch carHost pickup location
     //     $carHostPickupLocation = null;
     //     if($data && $data->vehicle && $data->vehicle->vehicle_id) {
@@ -1185,17 +1226,18 @@ class CarHostController extends Controller
     //                 ->first();
     //         }
     //     }
-        
+
     //     $filename = 'carhost-booking-invoice-' . $bookingId . '.pdf';
     //     $pdf = PDF::loadView('carhost-booking-invoice', compact('data', 'companyDetails', 'newBooking', 'extension', 'completion', 'totalAmt', 'totalTax', 'rateTotal', 'penaltyText', 'gstStatus', 'completionDisplay', 'extraKmString', 'newBookingTimeStamp', 'completionNewBooking', 'adminPenaltiesDue', 'paidPenalties', 'duePenalties', 'amountDue', 'carHostPickupLocation'))->setPaper('A3');
     //     return $pdf->stream('carhost-booking-invoice.pdf');
     // }
 
-    public function sendOtp(Request $request){
+    public function sendOtp(Request $request)
+    {
         $otpVia = config('global_values.otp_via');
         $otpVia = implode(',', $otpVia);
         $validator = Validator::make($request->all(), [
-            'otp_via' => 'required|in:'.$otpVia,
+            'otp_via' => 'required|in:' . $otpVia,
             'country_code' => ['nullable', 'string', 'regex:/^\+[1-9]\d{1,3}$/', 'required_if:otp_via,sms'],
             'mobile_number' => [
                 'nullable',
@@ -1233,71 +1275,71 @@ class CarHostController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $registerVia = NULL;
-        if(config('global_values.environment') == 'live'){
+        if (config('global_values.environment') == 'live') {
             if ($request->otp_via == 'email' && $request->email != '') {
                 $checkUser = CarHost::where('email', $request->email)->first();
-                if($checkUser == ''){
+                if ($checkUser == '') {
                     $registerVia = 2;
                 }
                 $user = CarHost::firstOrCreate(['email' => $request->email]);
-                if($user != '' && $registerVia != NULL){
+                if ($user != '' && $registerVia != NULL) {
                     $user->registered_via = $registerVia;
                 }
                 $otp = $this->generateAndSendEmailOTP($request->email);
-                if ($otp === null) { 
+                if ($otp === null) {
                     return $this->errorResponse('OTP already sent within 1 Minute.');
                 }
                 if ($otp && isset($otp['status']) && $otp['status'] == false) {
                     $errorMessage = $otp['message'] ?? 'Something went Wrong';
                     return $this->errorResponse($errorMessage);
-                } else{
+                } else {
                     $user->save();
-                    return $this->successResponse(['otp' => '', 'reuse_with_old_email_message' => "<span style='color: blue;'>If you wish to reuse the app, please log in with an old email, otherwise, create a new account</span>"], 'OTP sent for login.');    
+                    return $this->successResponse(['otp' => '', 'reuse_with_old_email_message' => "<span style='color: blue;'>If you wish to reuse the app, please log in with an old email, otherwise, create a new account</span>"], 'OTP sent for login.');
                 }
             } else if ($request->otp_via == 'sms' && $request->mobile_number != '') {
                 $checkUser = CarHost::where('mobile_number', $request->mobile_number)->first();
-                if($checkUser == ''){
+                if ($checkUser == '') {
                     $registerVia = 1;
                 }
-                $user = CarHost::firstOrCreate(['mobile_number' => $request->mobile_number , 'country_code' => $request->country_code]);
-                if($user != '' && $registerVia != NULL){
+                $user = CarHost::firstOrCreate(['mobile_number' => $request->mobile_number, 'country_code' => $request->country_code]);
+                if ($user != '' && $registerVia != NULL) {
                     $user->registered_via = $registerVia;
                 }
                 $otp = $this->generateAndSendOTP($request->mobile_number);
-                if ($otp === null) { 
+                if ($otp === null) {
                     return $this->errorResponse('OTP already sent within 1 Minute.');
                 }
                 if ($otp && isset($otp['status']) && $otp['status'] !== 200) {
                     $errorMessage = $otp['message'] ?? 'Something went Wrong';
                     return $this->errorResponse($errorMessage);
-                } else{
+                } else {
                     $user->save();
-                    return $this->successResponse(['otp' => '', 'reuse_with_old_number_message' => "<span style='color: blue;'>If you wish to reuse the app, please log in with an old phone number, otherwise, create a new account</span>"], 'OTP sent for login.');    
+                    return $this->successResponse(['otp' => '', 'reuse_with_old_number_message' => "<span style='color: blue;'>If you wish to reuse the app, please log in with an old phone number, otherwise, create a new account</span>"], 'OTP sent for login.');
                 }
             }
-        }else{
+        } else {
             $otp = '0000';
             if ($request->otp_via == 'email') {
                 $checkUser = CarHost::where('email', $request->email)->first();
-                if($checkUser == ''){
+                if ($checkUser == '') {
                     $registerVia = 2;
                 }
                 $user = CarHost::firstOrCreate(['email' => $request->email]);
-                if($user != '' && $registerVia != NULL){
+                if ($user != '' && $registerVia != NULL) {
                     $user->registered_via = $registerVia;
                 }
                 $user->save();
                 Cache::put('otp_' . $request->email, strval($otp), 60 * 5);
                 Cache::put('last_otp_sent_' . $request->email, now(), 30);
 
-                return $this->successResponse(['otp' => $otp, 'reuse_with_old_email_message' => "<span style='color: blue;'>If you wish to reuse the app, please log in with an old email, otherwise, create a new account</span>"], 'OTP sent for login.');    
-            } elseif($request->otp_via == 'sms'){
+                return $this->successResponse(['otp' => $otp, 'reuse_with_old_email_message' => "<span style='color: blue;'>If you wish to reuse the app, please log in with an old email, otherwise, create a new account</span>"], 'OTP sent for login.');
+            } elseif ($request->otp_via == 'sms') {
                 $checkUser = CarHost::where('mobile_number', $request->mobile_number)->first();
-                if($checkUser == ''){
+                if ($checkUser == '') {
                     $registerVia = 1;
                 }
-                $user = CarHost::firstOrCreate(['mobile_number' => $request->mobile_number , 'country_code' => $request->country_code]);
-                if($user != '' && $registerVia != NULL){
+                $user = CarHost::firstOrCreate(['mobile_number' => $request->mobile_number, 'country_code' => $request->country_code]);
+                if ($user != '' && $registerVia != NULL) {
                     $user->registered_via = $registerVia;
                 }
                 $user->save();
@@ -1314,7 +1356,7 @@ class CarHostController extends Controller
         $otpVia = config('global_values.otp_via');
         $otpVia = implode(',', $otpVia);
         $validator = Validator::make($request->all(), [
-            'otp_via' => 'required|in:'.$otpVia,
+            'otp_via' => 'required|in:' . $otpVia,
             'country_code' => ['nullable', 'string', 'regex:/^\+[1-9]\d{1,3}$/', 'required_if:otp_via,sms'],
             'mobile_number' => [
                 'nullable',
@@ -1354,7 +1396,7 @@ class CarHostController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        if($request->otp_via == 'email'){
+        if ($request->otp_via == 'email') {
             $otp = Cache::get('otp_' . $request->email);
             if (!$otp || $otp !== $request->otp) {
                 return $this->errorResponse('Invalid OTP');
@@ -1363,7 +1405,7 @@ class CarHostController extends Controller
             if (!$user) {
                 return $this->errorResponse('Customer not found');
             }
-        }else if($request->otp_via == 'sms'){
+        } else if ($request->otp_via == 'sms') {
             $otp = Cache::get('otp_' . $request->mobile_number);
             if (!$otp || $otp !== $request->otp) {
                 return $this->errorResponse('Invalid OTP');
@@ -1376,7 +1418,7 @@ class CarHostController extends Controller
 
         $user->device_token = $request->firebase_token; // Replace with the correct device token
         $user->save();
-        
+
         $token = JWTAuth::fromUser($user);
         auth()->guard('api-carhost')->login($user);
 
@@ -1386,9 +1428,9 @@ class CarHostController extends Controller
         $loginToken->token = $token;
         $loginToken->save();
 
-        if(isset($request->device_info) && $request->device_info != ''){
+        if (isset($request->device_info) && $request->device_info != '') {
             $userDevice = new UserDevice();
-            $userDevice->app = 2; 
+            $userDevice->app = 2;
             $userDevice->customer_id = $user->id;
             $userDevice->device_info = json_encode($request->device_info);
             $userDevice->save();
@@ -1396,7 +1438,7 @@ class CarHostController extends Controller
         //$token = Auth::guard('api-carhost')->login($user);
         $vehicleStatus = false;
         $checkVehicle = CarEligibility::where('car_hosts_id', $user->id)->count();
-        if($checkVehicle > 0){
+        if ($checkVehicle > 0) {
             $vehicleStatus = true;
         }
         $user->vehicle_status = $vehicleStatus;
@@ -1415,7 +1457,7 @@ class CarHostController extends Controller
         $otpVia = config('global_values.otp_via');
         $otpVia = implode(',', $otpVia);
         $validator = Validator::make($request->all(), [
-            'otp_via' => 'required|in:'.$otpVia,
+            'otp_via' => 'required|in:' . $otpVia,
             'country_code' => ['nullable', 'string', 'regex:/^\+[1-9]\d{1,3}$/', 'required_if:otp_via,sms'],
             'mobile_number' => [
                 'nullable',
@@ -1456,24 +1498,24 @@ class CarHostController extends Controller
         }
 
         $user = '';
-        if($request->otp_via == 'sms'){
+        if ($request->otp_via == 'sms') {
             $otp = Cache::get('otp_' . $request->mobile_number);
             if (!$otp || $otp !== $request->otp) {
                 return $this->errorResponse('Invalid OTP');
             }
-            $user = CarHost::where('mobile_number', $request->mobile_number)->orderBy('id' , 'desc')->first();
-        } else if($request->otp_via == 'email'){
+            $user = CarHost::where('mobile_number', $request->mobile_number)->orderBy('id', 'desc')->first();
+        } else if ($request->otp_via == 'email') {
             $otp = Cache::get('otp_' . $request->email);
             if (!$otp || $otp !== $request->otp) {
                 return $this->errorResponse('Invalid OTP');
             }
-            $user = CarHost::where('email', $request->email)->orderBy('id' , 'desc')->first();
+            $user = CarHost::where('email', $request->email)->orderBy('id', 'desc')->first();
         }
 
         if ($request->login_with_old_account && $request->login_with_old_account == 1 && $user != '') {
             $user->is_deleted = 0;
             $user->save();
-            
+
             // Login to the old account
             $token = JWTAuth::fromUser($user);
             auth()->guard('api-carhost')->login($user);
@@ -1509,10 +1551,12 @@ class CarHostController extends Controller
             //$token = Auth::guard('api-carhost')->login($user);
 
             return $this->successResponse([
-                'user' => $user, 'authorisation' => [
+                'user' => $user,
+                'authorisation' => [
                     'token' => $token,
                     'type' => 'bearer',
-                ]], 'A new account has been created for you');
+                ]
+            ], 'A new account has been created for you');
         }
     }
 
@@ -1526,15 +1570,15 @@ class CarHostController extends Controller
             return;
         }
 
-        if(isset($mobileNumber) && $mobileNumber == '9999999999'){
+        if (isset($mobileNumber) && $mobileNumber == '9999999999') {
             $otp = "0000";
-        }else{
+        } else {
             $otp = strval(mt_rand(1000, 9999));
-            $checkresponse =  $this->smsService->sendOTP($mobileNumber,$otp);
+            $checkresponse = $this->smsService->sendOTP($mobileNumber, $otp);
             // Check the response status and handle errors
-            if($checkresponse && isset($checkresponse['status']) && $checkresponse['status'] != 200){
+            if ($checkresponse && isset($checkresponse['status']) && $checkresponse['status'] != 200) {
                 $checkResponse['message'] = $checkResponse['message'] ?? 'An error occurred while sending OTP.';
-                return $checkresponse; 
+                return $checkresponse;
             }
         }
 
@@ -1543,7 +1587,7 @@ class CarHostController extends Controller
         // Store the timestamp of the OTP sent
         Cache::put('last_otp_sent_' . $mobileNumber, now(), 30);
 
-        return $otp; 
+        return $otp;
     }
 
     private function generateAndSendEmailOTP($email)
@@ -1557,16 +1601,17 @@ class CarHostController extends Controller
         $to = $email;
         $subject = "OTP for Email Verification";
         $from = config('global_values.mail_from');
-        if(isset($to) && $to != ''){
-            try{
+        if (isset($to) && $to != '') {
+            try {
                 Mail::send('emails.email_otp', ['otp' => $otp], function ($m) use ($subject, $to, $from) {
                     $m->from($from)->to($to)->subject($subject);
                 });
-            } catch (\Exception $e) {} 
-        }else{
+            } catch (\Exception $e) {
+            }
+        } else {
             $checkResponse['status'] = false;
             $checkResponse['message'] = 'Email Not Found';
-            return $checkresponse; 
+            return $checkResponse;
         }
 
         // Cache the OTP and timestamp
@@ -1574,26 +1619,27 @@ class CarHostController extends Controller
         // Store the timestamp of the OTP sent
         Cache::put('last_otp_sent_' . $email, now(), 30);
 
-        return $otp; 
+        return $otp;
     }
 
-    public function getProfile(Request $request){
+    public function getProfile(Request $request)
+    {
         $user = $this->userAuthDetails;
         $user = CarHost::where('id', $user->id)
-                ->where('is_deleted', 0)
-                ->orderBy('id', 'desc')
-                ->first();
+            ->where('is_deleted', 0)
+            ->orderBy('id', 'desc')
+            ->first();
         if (!$user) {
             return $this->errorResponse('User not found');
         }
-        
+
         $user->delete_account_message = "<span style='color: red;'>THIS ACTION CANNOT BE UNDONE. This will permanently delete your account and all of its data.</span>";
         $user->email_verification_message = "<span style='color: blue;'>An email will be sent to verify your email!</span>";
-        if(isset($user) && $user != ''){
+        if (isset($user) && $user != '') {
             $emailVerificationStatus = false;
             $emailVerificationTitle = "";
             $emailVerificationMessage = "";
-            if($user->email_verified_at != null){
+            if ($user->email_verified_at != null) {
                 $emailVerificationStatus = true;
                 $emailVerificationTitle = "";
                 $emailVerificationMessage = "";
@@ -1617,20 +1663,20 @@ class CarHostController extends Controller
                 'email:rfc,dns',
                 'max:255',
                 Rule::unique('car_hosts', 'email')
-                ->where(function ($query) {
-                    $query->where('is_deleted', 0);
-                })
-                ->ignore($customerId, 'id'),
+                    ->where(function ($query) {
+                        $query->where('is_deleted', 0);
+                    })
+                    ->ignore($customerId, 'id'),
             ],
             'dob' => 'date',
             'mobile_number' => [
                 'numeric',
-                'digits_between:8,15',  
+                'digits_between:8,15',
                 Rule::unique('car_hosts', 'mobile_number')
-                ->ignore($customerId, 'id')
-                ->where(function ($query) {
-                    $query->where('is_deleted', 0);
-                }),
+                    ->ignore($customerId, 'id')
+                    ->where(function ($query) {
+                        $query->where('is_deleted', 0);
+                    }),
             ],
             'mobile_number' => 'nullable|numeric|digits_between:8,15',
             'profile_picture' => 'nullable|image|mimetypes:image/heic,image/heif,image/jpeg,image/png,image/jpg,image/bmp,image/gif,image/svg,image/webp|max:4096',
@@ -1641,26 +1687,26 @@ class CarHostController extends Controller
         }
 
         $user = CarHost::where('id', $user->id)->where('is_deleted', 0)->orderBy('id', 'desc')->first();
-        if(isset($request->email) && $request->email != '' && $request->email != $user->email){
+        if (isset($request->email) && $request->email != '' && $request->email != $user->email) {
             $mailStatus = true;
         }
-        if(isset($request->mobile_number) && $request->mobile_number != '' && $request->mobile_number != $user->mobile_number){
+        if (isset($request->mobile_number) && $request->mobile_number != '' && $request->mobile_number != $user->mobile_number) {
             $sendOtpStatus = true;
         }
-        
+
         $user->fill($request->except('profile_picture', 'dob'));
         $dob = date('Y-m-d', strtotime($request->dob));
         if ($request->hasFile('profile_picture')) {
             $file = $request->file('profile_picture');
-            $filename = 'Carhost_userprofile_'.$user->id.'_'.time() . '.' . $file->getClientOriginalExtension();
+            $filename = 'Carhost_userprofile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('images/profile_pictures'), $filename);
             $user->profile_picture_url = $filename;
         }
         $user->dob = $dob;
         $user->save();
-        if(config('global_values.environment') != '' && config('global_values.environment') == 'live' && ($mailStatus == true || $sendOtpStatus == true)){
+        if (config('global_values.environment') != '' && config('global_values.environment') == 'live' && ($mailStatus == true || $sendOtpStatus == true)) {
             //Send Mail to Customer
-            if($mailStatus == true){
+            if ($mailStatus == true) {
                 $user->email_verified_at = null;
                 $user->save();
 
@@ -1669,36 +1715,37 @@ class CarHostController extends Controller
                 $from = config('global_values.mail_from');
                 $customerId = Crypt::encrypt($user->id);
                 $name = $user->firstname ?? '';
-                $name .= ' '.$user->lastname ?? '';
+                $name .= ' ' . $user->lastname ?? '';
                 $email = Crypt::encrypt($to);
                 $app = Crypt::encrypt('v_host');
-                if(isset($to) && $to != ''){
-                    try{
+                if (isset($to) && $to != '') {
+                    try {
                         // Send Verification mail to Customer
                         Mail::send('emails.front.email_verification', ['customer_id' => $customerId, 'name' => $name, 'email' => $email, 'app' => $app], function ($m) use ($subject, $to, $from) {
                             $m->from($from)->to($to)->subject($subject);
                         });
-                    } catch (\Exception $e) {} 
+                    } catch (\Exception $e) {
+                    }
                 }
             }
             //Sent OTP to Customer
-            if($sendOtpStatus == true){
+            if ($sendOtpStatus == true) {
                 $otp = $this->generateAndSendOTP($user->mobile_number);
                 if ($otp === null) {
                     return $this->errorResponse('OTP already sent within 1 Minute.');
                 }
-                if($otp && isset($otp['status']) && $otp['status'] != 200){
-                    if(isset($otp['message']) && $otp['message'] != ''){
+                if ($otp && isset($otp['status']) && $otp['status'] != 200) {
+                    if (isset($otp['message']) && $otp['message'] != '') {
                         return $this->errorResponse($otp['message']);
                     }
-                }else{
+                } else {
                     return $this->successResponse(['otp' => $otp, 'user' => $user], 'OTP sent for login.');
                 }
-            }else{
-                return $this->successResponse(['user' => $user], 'Profile updated successfully');    
+            } else {
+                return $this->successResponse(['user' => $user], 'Profile updated successfully');
             }
-        }else{
-             return $this->errorResponse('You can not send Mail on Staging Env.');
+        } else {
+            return $this->errorResponse('You can not send Mail on Staging Env.');
         }
     }
 
@@ -1713,24 +1760,24 @@ class CarHostController extends Controller
         }
 
         $checkexistMobile = CarHost::where('mobile_number', $request->mobile_number)->where('is_deleted', 0)->first();
-        
+
         if ($checkexistMobile != null) {
             return $this->errorResponse('Mobile number already exist.');
         } else {
-            if(config('global_values.environment') == 'live'){
+            if (config('global_values.environment') == 'live') {
                 $otp = $this->generateAndSendOTP($request->mobile_number);
                 if ($otp === null) {
                     return $this->errorResponse('OTP already sent within 1 Minute.');
-                }    
-                
-                if($otp && isset($otp['status']) && $otp['status'] != 200){
-                    if(isset($otp['message']) && $otp['message'] != ''){
+                }
+
+                if ($otp && isset($otp['status']) && $otp['status'] != 200) {
+                    if (isset($otp['message']) && $otp['message'] != '') {
                         return $this->errorResponse($otp['message']);
                     }
-                }else{
+                } else {
                     return $this->successResponse(['otp' => null], 'OTP sent for mobile number update.');
                 }
-            }else{
+            } else {
                 $otp = '0000';
                 Cache::put('otp_' . $request->mobile_number, strval($otp), 60 * 5);
                 Cache::put('last_otp_sent_' . $request->mobile_number, now(), 30);
@@ -1738,7 +1785,7 @@ class CarHostController extends Controller
             }
         }
     }
-    
+
     public function updateMobileNumberVerifyOTP(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -1769,7 +1816,8 @@ class CarHostController extends Controller
         return $this->successResponse(null, 'Mobile number updated successfully');
     }
 
-    public function updateEmailAddr(Request $request){
+    public function updateEmailAddr(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'email' => [
                 'required',
@@ -1806,17 +1854,18 @@ class CarHostController extends Controller
             $otp = $this->generateAndSendEmailOTP($request->email);
             if ($otp === null) {
                 return $this->errorResponse('OTP already sent within 1 Minute.');
-            }    
-            if($otp && isset($otp['status']) && $otp['status'] != 200){
+            }
+            if ($otp && isset($otp['status']) && $otp['status'] != 200) {
                 $errorMessage = $otp['message'] ?? 'Something went Wrong';
                 return $this->errorResponse($errorMessage);
-            }else{
+            } else {
                 return $this->successResponse(['otp' => null], 'OTP sent for Email update.');
             }
         }
     }
 
-    public function updateEmailAddrVerifyOTP(Request $request){
+    public function updateEmailAddrVerifyOTP(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'email' => [
                 'required',
@@ -1880,17 +1929,17 @@ class CarHostController extends Controller
         $user = Auth::guard('api-carhost')->user();
         $customerId = $user->id;
         $user = CarHost::where('id', $customerId)
-                ->where('is_deleted', 0)
-                ->orderBy('id', 'desc')
-                ->first();
+            ->where('is_deleted', 0)
+            ->orderBy('id', 'desc')
+            ->first();
         $user->is_deleted = true;
         $user->device_token = '';
         $user->save();
-        
+
         $loginToken = LoginToken::where('customer_id', $user->id)->where('app', 2)->get();
-        if(is_countable($loginToken) && count($loginToken) > 0){
-            foreach($loginToken as $key => $val){
-                if(isset($val->token) && $val->token != ''){
+        if (is_countable($loginToken) && count($loginToken) > 0) {
+            foreach ($loginToken as $key => $val) {
+                if (isset($val->token) && $val->token != '') {
                     try {
                         JWTAuth::setToken($val->token)->invalidate();
                         $val->delete();
@@ -1947,8 +1996,8 @@ class CarHostController extends Controller
             'add_vehicle_feature' => "<span style='font-weight: bold;'>Offer your guests a glimpse into the extraordinary aspects of your car, enabling them to make a decision that embraces its unparalleled uniqueness</span>",
             'listing_location' => "<span style='font-weight: bold;'>No Location Found! Add a new Location</span>",
             'share_your_pickup' => "<span style='font-weight: bold;'>Guests will pick up your vehicle from here </span>",
-            'vehicle_pickup_location_details' => "<span style='font-weight: bold;'>Upon completing your vehicle reservation, guests will have access to this information</span>", 
-            'add_rc_card' => "<span style='font-weight: bold;'>Opt for natural light to capture clear and vibrant photos Showcasing the complete backside of RC, emphasizing every intricate detail</span>", 
+            'vehicle_pickup_location_details' => "<span style='font-weight: bold;'>Upon completing your vehicle reservation, guests will have access to this information</span>",
+            'add_rc_card' => "<span style='font-weight: bold;'>Opt for natural light to capture clear and vibrant photos Showcasing the complete backside of RC, emphasizing every intricate detail</span>",
             'pan_card' => "<span style='font-weight: bold;'>Ensure prompt submission of your updated PAN card details to avoid any inconvenience. Non-compliance may lead to a 20% TDS deduction, as mandated by government norms</span>",
             'view_bank_details' => "<span style='font-weight: bold;'>No bank details found</span>",
             'bank_information' => "<span style='font-weight: bold;'>Provide your bank account information, we will transfer your earnings in your account.</span>",
@@ -1959,12 +2008,13 @@ class CarHostController extends Controller
             'pricing_control_rating' => "<span style='font-weight: bold;'>Considering your car ratings is part of the equation in determining your price.</span>",
             'delete_acocunt_popup' => "<span style='font-weight: bold;'>THIS ACTION CANNOT BE UNDONE. This will permanently delete your account and all of its data.</span>",
             'try_again_payment_message' => "<span style='color: red;'>Please try again</span>",
-            'reuse_with_old_number_message'=> "<span style='color: blue;'>If you wish to reuse the app, please log in with an old phone number, otherwise, create a new account</span>",
-            'email_verification_message'=> "<span style='color: blue;'>An email will be sent to verify your email!</span>",
+            'reuse_with_old_number_message' => "<span style='color: blue;'>If you wish to reuse the app, please log in with an old phone number, otherwise, create a new account</span>",
+            'email_verification_message' => "<span style='color: blue;'>An email will be sent to verify your email!</span>",
         ]);
     }
 
-    public function getBankDetails(Request $request){
+    public function getBankDetails(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'bank_id' => 'nullable|exists:car_host_banks,id',
         ]);
@@ -1973,46 +2023,49 @@ class CarHostController extends Controller
         }
 
         $user = '';
-        if(Auth::guard('api-carhost')->check()){
-            $user = Auth::guard('api-carhost')->user();    
-        }else{
+        if (Auth::guard('api-carhost')->check()) {
+            $user = Auth::guard('api-carhost')->user();
+        } else {
             return $this->errorResponse('User not found');
         }
         $carHostBank = CarHostBank::where('car_hosts_id', $user->id)->where('is_deleted', 0);
-        if(isset($request->bank_id) && $request->bank_id != ''){
+        if (isset($request->bank_id) && $request->bank_id != '') {
             $carHostBank = $carHostBank->where('id', $request->bank_id);
         }
         $carHostBank = $carHostBank->get();
-        if(is_countable($carHostBank) && count($carHostBank) > 0){
+        if (is_countable($carHostBank) && count($carHostBank) > 0) {
             foreach ($carHostBank as $key => $value) {
-                $value->car_hosts_id = (string)$value->car_hosts_id;
-                if(isset($value->passbook_image) && $value->passbook_image != ''){
-                    $value->passbook_image = url('host_bank_document').'/'.$value->passbook_image;
+                $value->car_hosts_id = (string) $value->car_hosts_id;
+                if (isset($value->passbook_image) && $value->passbook_image != '') {
+                    $value->passbook_image = url('host_bank_document') . '/' . $value->passbook_image;
                 }
             }
             return $this->successResponse($carHostBank, 'Carhost Bank details are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Carhost bank details are not found');
         }
     }
 
-    public function getBookingStatusList(Request $request){
+    public function getBookingStatusList(Request $request)
+    {
         $booking_status = config('global_values.booking_statuses');
 
         return $this->successResponse($booking_status, 'Booking Stauses are get Successfully');
     }
 
-    public function getBookingTimeDuration(Request $request){
+    public function getBookingTimeDuration(Request $request)
+    {
         $booking_time_duration = config('global_values.time_duration');
 
         return $this->successResponse($booking_time_duration, 'Booking Time Duration are get Successfully');
     }
 
-    public function storeBankDetails(Request $request){
+    public function storeBankDetails(Request $request)
+    {
         $user = '';
-        if(Auth::guard('api-carhost')->check()){
-            $user = Auth::guard('api-carhost')->user();    
-        }else{
+        if (Auth::guard('api-carhost')->check()) {
+            $user = Auth::guard('api-carhost')->user();
+        } else {
             return $this->errorResponse('User not found');
         }
         $validator = Validator::make($request->all(), [
@@ -2034,19 +2087,19 @@ class CarHostController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $carHostBank = '';
-        if($request->bank_id == ''){
+        if ($request->bank_id == '') {
             $checkBankCnt = CarHostBank::where('car_hosts_id', $user->id)->where('is_deleted', 0)->count();
-            if($checkBankCnt >= 2){
+            if ($checkBankCnt >= 2) {
                 return $this->errorResponse('You can not add more than 2 Banks');
             }
             $checkBank = CarHostBank::where(['car_hosts_id' => $user->id, 'is_deleted' => 0, 'account_no' => $request->account_no, 'ifsc_code' => $request->ifsc_code])->exists();
-            if($checkBank){
+            if ($checkBank) {
                 return $this->errorResponse('Already Existed');
             }
             $carHostBank = new CarHostBank();
             $carHostBank->car_hosts_id = $user->id;
-        }else{
-            $carHostBank = CarHostBank::where('id', $request->bank_id)->where('is_deleted', 0)->first();    
+        } else {
+            $carHostBank = CarHostBank::where('id', $request->bank_id)->where('is_deleted', 0)->first();
         }
         $bankStatus = false;
 
@@ -2056,45 +2109,46 @@ class CarHostController extends Controller
         $carHostBank->city = $request->city;
         $carHostBank->account_no = $request->account_no;
         $carHostBank->ifsc_code = $request->ifsc_code;
-        $carHostBank->nick_name = isset($request->nick_name)?$request->nick_name:NULL;
+        $carHostBank->nick_name = isset($request->nick_name) ? $request->nick_name : NULL;
         if ($request->hasFile('passbook_image')) {
             $file = $request->file('passbook_image');
-            $filename = 'hostbank_'.$carHostBank->id.'_'.time().'_' . uniqid() . '.' . $file->getClientOriginalExtension();
+            $filename = 'hostbank_' . $carHostBank->id . '_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('host_bank_document'), $filename);
             $carHostBank->passbook_image = $filename;
         }
-        
+
         $primaryStatus = $request->is_primary;
         $carHostBankCheck = CarHostBank::where('car_hosts_id', $user->id)->where('is_deleted', 0)->count();
-        if($carHostBankCheck == 0){
+        if ($carHostBankCheck == 0) {
             $primaryStatus = 1;
             $carHostBank->is_primary = $request->is_primary;
             $bankStatus = true;
         }
-        if(isset($request->is_primary) && $request->is_primary == 1){
-            CarHostBank::where('car_hosts_id', $user->id)->where('id', '!=', $carHostBank->id)->update(['is_primary'=> 2]);
+        if (isset($request->is_primary) && $request->is_primary == 1) {
+            CarHostBank::where('car_hosts_id', $user->id)->where('id', '!=', $carHostBank->id)->update(['is_primary' => 2]);
             $carHostBank->is_primary = $request->is_primary;
             $bankStatus = true;
-        }elseif(isset($request->is_primary) && $request->is_primary == 2){
+        } elseif (isset($request->is_primary) && $request->is_primary == 2) {
             $hostBank = CarHostBank::where('car_hosts_id', $user->id)->where('id', '!=', $carHostBank->id)->where('is_primary', 1)->first();
-            if($hostBank != ''){
+            if ($hostBank != '') {
                 $carHostBank->is_primary = $request->is_primary;
                 $bankStatus = true;
-            }elseif($carHostBankCheck == 0){
+            } elseif ($carHostBankCheck == 0) {
                 $carHostBank->is_primary = 1;
                 $bankStatus = true;
             }
         }
 
-        if($bankStatus == true){
+        if ($bankStatus == true) {
             $carHostBank->save();
             return $this->successResponse($carHostBank, 'Carhost Bank details are stored successfully');
-        }else{
+        } else {
             return $this->errorResponse('Please make any one Bank as primary first');
         }
     }
 
-    public function deleteBank(Request $request){
+    public function deleteBank(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'id' => 'required|exists:car_host_banks,id',
         ]);
@@ -2102,21 +2156,22 @@ class CarHostController extends Controller
             return $this->validationErrorResponse($validator);
         }
         $carHostBank = CarHostBank::where('id', $request->id)->first();
-        if($carHostBank != ''){
+        if ($carHostBank != '') {
             $checkPrimaryBank = CarHostBank::where(['id' => $request->id, 'is_primary' => 1])->first();
-            if($checkPrimaryBank == ''){
+            if ($checkPrimaryBank == '') {
                 $carHostBank->is_deleted = 1;
                 $carHostBank->save();
                 return $this->successResponse($carHostBank, 'Carhost Bank details are deleted successfully');
-            }else{
+            } else {
                 return $this->errorResponse('You can not delete primary bank. To delete this bank, please make any other bank as primary first');
             }
-        }else{
+        } else {
             return $this->errorResponse('Carhost Bank details are not found');
         }
     }
 
-    public function storeGstInfo(Request $request){
+    public function storeGstInfo(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'business_name' => 'required',
             'gst_number' => 'required',
@@ -2125,7 +2180,7 @@ class CarHostController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        $user = Auth::guard('api-carhost')->user();  
+        $user = Auth::guard('api-carhost')->user();
         $carHost = CarHost::where('id', $user->id)->first();
         $carHost->business_name = $request->business_name;
         $carHost->gst_number = $request->gst_number;
@@ -2134,7 +2189,8 @@ class CarHostController extends Controller
         return $this->successResponse($carHost, 'Customer GST information stored successfully');
     }
 
-    public function storePanNumber(Request $request){
+    public function storePanNumber(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'pan_number' => 'nullable',
         ]);
@@ -2146,13 +2202,13 @@ class CarHostController extends Controller
         if (isset($pan) && $pan != '' && !preg_match('/^([a-zA-Z]){5}([0-9]){4}([a-zA-Z]){1}?$/', $pan)) {
             return $this->errorResponse('PAN number is not valid');
         }
-        if(Auth::guard('api-carhost')->user()){
+        if (Auth::guard('api-carhost')->user()) {
             $user = Auth::guard('api-carhost')->user();
             $user = CarHost::where('id', $user->id)->first();
             $user->pan_number = $request->pan_number ?? '';
             $user->save();
             return $this->successResponse($user, 'PAN number stored successfully');
-        }else{
+        } else {
             return $this->errorResponse('User not Found');
         }
     }

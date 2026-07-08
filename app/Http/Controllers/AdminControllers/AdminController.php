@@ -16,7 +16,8 @@ use Carbon\Carbon;
 class AdminController extends Controller
 {
 
-    public function getAdminDashboard(){
+    public function getAdminDashboard()
+    {
 
         return view('admin.dashboard');
     }
@@ -27,20 +28,20 @@ class AdminController extends Controller
     }
 
     // LARAVEL LOGIN
-    public function postLogin(Request $request){
+    public function postLogin(Request $request)
+    {
         $this->validate($request, [
             'username' => 'required',
             'password' => 'required',
         ]);
-        
-        if (auth()->guard('admin_web')->attempt(['username' => $request->input('username'), 'password' => $request->input('password')]))
-        {
+
+        if (auth()->guard('admin_web')->attempt(['username' => $request->input('username'), 'password' => $request->input('password')])) {
             $admin = auth()->guard('admin_web')->user();
-            
-            return redirect()->route('admin.dashboard')->with('success','You are Login successfully!!');
-            
+
+            return redirect()->route('admin.dashboard')->with('success', 'You are Login successfully!!');
+
         } else {
-            return back()->with('error','your Username OR Password are wrong.');
+            return back()->with('error', 'your Username OR Password are wrong.');
         }
     }
 
@@ -49,14 +50,14 @@ class AdminController extends Controller
     //         'username' => 'required',
     //         'password' => 'required',
     //     ]);
-        
+
     //     if (auth()->guard('admin')->attempt(['username' => $request->input('username'), 'password' => $request->input('password')]))
     //     {
     //         $admin = auth()->guard('admin')->user();
 
     //         return $this->successResponse('You are Login successfully!!');
     //         //return redirect()->route('admin.dashboard')->with('success','You are Login successfully!!');
-            
+
     //     } else {
     //         return $this->errorResponse('Your Username OR Password are wrong.');
     //         //return back()->with('error','your Username OR Password are wrong.');
@@ -88,12 +89,13 @@ class AdminController extends Controller
         }
     }*/
 
-    public function getAdmins(){
+    public function getAdmins()
+    {
         hasPermission('admins');
 
         //$admins = AdminUser::whereNotIn('admin_id', [1])->get();
         $admins = AdminUser::select('admin_users.admin_id as id', 'admin_users.username', 'roles.name as rolename', 'admin_users.created_at')->where('is_deleted', 0)->leftJoin('roles', 'roles.id', '=', 'admin_users.role')->whereNotIn('admin_id', [1])->get();
-      
+
         return response()->json([
             'status' => true,
             'message' => 'Admins fetched successfully',
@@ -101,7 +103,8 @@ class AdminController extends Controller
         ], 200);
     }
 
-    public function getAdmin(Request $request){
+    public function getAdmin(Request $request)
+    {
         $admin = AdminUser::find($request->input('id'));
         return response()->json([
             'status' => true,
@@ -110,7 +113,8 @@ class AdminController extends Controller
         ], 200);
     }
 
-    public function createAdmin(Request $request){
+    public function createAdmin(Request $request)
+    {
         $request->validate([
             'username' => 'required',
             'password' => 'required',
@@ -123,16 +127,16 @@ class AdminController extends Controller
         $admin->role = $request->input('role');
         $admin->save();
 
-        if(isset($request->role) && $request->role != ''){
-            if($request->role == 2){
+        if (isset($request->role) && $request->role != '') {
+            if ($request->role == 2) {
                 $permission_moduleids = config('global_values.manager_permissions');
-                $admin->syncPermissions($permission_moduleids);     
-            }elseif($request->role == 3){
+                $admin->syncPermissions($permission_moduleids);
+            } elseif ($request->role == 3) {
                 $permission_moduleids = config('global_values.accountant_permissions');
-                $admin->syncPermissions($permission_moduleids);     
-            }elseif($request->role == 4){
+                $admin->syncPermissions($permission_moduleids);
+            } elseif ($request->role == 4) {
                 $permission_moduleids = config('global_values.admin');
-                $admin->syncPermissions($permission_moduleids);     
+                $admin->syncPermissions($permission_moduleids);
             }
         }
 
@@ -146,7 +150,8 @@ class AdminController extends Controller
         ], 200);
     }
 
-    public function updateAdmin(Request $request){
+    public function updateAdmin(Request $request)
+    {
         $request->validate([
             'id' => 'required',
             'username' => 'required',
@@ -158,16 +163,16 @@ class AdminController extends Controller
         $admin->role = $request->input('role');
         $admin->save();
 
-        if(isset($request->role) && $request->role != ''){
-            if($request->role == 2){
+        if (isset($request->role) && $request->role != '') {
+            if ($request->role == 2) {
                 $permission_moduleids = config('global_values.manager_permissions');
-                $admin->syncPermissions($permission_moduleids);     
-            }elseif($request->role == 3){
+                $admin->syncPermissions($permission_moduleids);
+            } elseif ($request->role == 3) {
                 $permission_moduleids = config('global_values.accountant_permissions');
-                $admin->syncPermissions($permission_moduleids);     
-            }elseif($request->role == 4){
+                $admin->syncPermissions($permission_moduleids);
+            } elseif ($request->role == 4) {
                 $permission_moduleids = config('global_values.admin');
-                $admin->syncPermissions($permission_moduleids);     
+                $admin->syncPermissions($permission_moduleids);
             }
         }
 
@@ -177,19 +182,20 @@ class AdminController extends Controller
         ], 200);
     }
 
-    public function deleteAdmin(Request $request){
+    public function deleteAdmin(Request $request)
+    {
         $admin = AdminUser::find($request->input('id'));
-        if(isset($admin->role) && $admin->role != ''){
+        if (isset($admin->role) && $admin->role != '') {
             //Remove this particular admin user's permissions
-            if($admin->role == 2){
+            if ($admin->role == 2) {
                 $permission_moduleids = config('global_values.manager_permissions');
-                $admin->revokePermissionTo($permission_moduleids);   
-            }elseif($admin->role == 3){
+                $admin->revokePermissionTo($permission_moduleids);
+            } elseif ($admin->role == 3) {
                 $permission_moduleids = config('global_values.accountant_permissions');
                 $admin->revokePermissionTo($permission_moduleids);
-            }elseif($request->role == 4){
+            } elseif ($request->role == 4) {
                 $permission_moduleids = config('global_values.admin');
-                $admin->syncPermissions($permission_moduleids);     
+                $admin->syncPermissions($permission_moduleids);
             }
         }
         $admin->is_deleted = 1;
@@ -201,73 +207,22 @@ class AdminController extends Controller
         ], 200);
     }
 
-    public function getAdminList(){
+    public function getAdminList()
+    {
         hasPermission('admins');
         return view('admin.users');
     }
 
-    public function testCode(Request $request){
-        // TEST ICICI PHICOMMERCE PAYMENT GATEWAY
-        $merchantTrnNum = random_int(100, 100000);
-        $txnDate = Carbon::now()->format('YmdHis');
-        $txnDate = (string)$txnDate;
-        $bookingId = 100;
-        $params = [
-            "merchantId"       => "T_03338",
-            "merchantTxnNo"    => $merchantTrnNum,
-            "amount"           => "300.00",
-            "currencyCode"     => "356",
-            "payType"          => "0",
-            "customerEmailID"  => "testicicipg@yopmail.com",
-            "transactionType"  => "SALE",
-            "txnDate"          => $txnDate,
-            "returnURL"        => url('test1'),
-            "customerMobileNo" => "917498791441",
-            "addlParam1"       => $bookingId,
-        ];
-        // Step 1: Sort params by key name in ascending order
-        ksort($params);
-        // Step 2: Concatenate parameter values (ignore null/empty values)
-        $concatenated = "";
-        foreach ($params as $key => $value) {
-            if ($value !== null && $value !== "") {
-                $concatenated .= $value;
-            }
-        }
-        // 🔑 Replace this with the actual key shared by PhiCommerce
-        $secretKey = 'abc'; //"YOUR_SECRET_KEY_HERE";
-        // Step 3: Generate HMAC SHA256 hash
-        $hash = hash_hmac("sha256", $concatenated, $secretKey);
-        // Step 4: Convert to lowercase HEX (hash_hmac already returns lowercase)
-        $secureHash = strtolower($hash);
-        $newKey   = "secureHash";
-        $newValue = $secureHash;
-        // Appended secureHash after returnURL
-        $pos = array_search("returnURL", array_keys($params)) + 1; // position after returnURL
-        $params = array_slice($params, 0, $pos, true) + [$newKey => $newValue] + array_slice($params, $pos, null, true);
-        //\Log::info("REQ 11 - " . $params);
-        // CALL SALES API
-        $client = new Client();    
-        $response = $client->post('https://qa.phicommerce.com/pg/api/v2/initiateSale', [
-            'headers' => [
-                'Content-Type' => 'application/json',
-            ],
-            'json' => $params,
+    public function testCode(Request $request)
+    {
+        return response()->json([
+            'php_binary' => PHP_BINARY,
+            'booking_transactions_columns' => \Illuminate\Support\Facades\Schema::getColumnListing('booking_transactions')
         ]);
-        $body = $response->getBody()->getContents();
-        //\Log::info("RES 11 - " . $body);
-        $body = json_decode($body, true);
-        $tranCtx = $body['tranCtx'] ?? '';
-        $redirectUri = $body['redirectURI'] ?? '';
-        if(isset($tranCtx) && $tranCtx != '' && isset($redirectUri) && $redirectUri != ''){
-            $redirectUrl = $redirectUri.'?tranCtx='.$tranCtx; 
-        }else{
-            $redirectUrl = 'https://test.velriders.com/test1';
-        }
-        return redirect()->to($redirectUrl);
     }
 
-    public function testCode1(Request $request){
+    public function testCode1(Request $request)
+    {
         // Array
         //     (
         //         [secureHash] => e52924fc881f6fc62aba21cbda50fd75d92e770a58d1daf9f6289b1d56c7d4b8
@@ -292,11 +247,11 @@ class AdminController extends Controller
         $paymentID = $request->paymentID ?? '';
         $txnID = $request->txnID ?? '';
         $params = [
-            "merchantID"       => $merchantId,
-            "merchantTxnNo"    => $merchantTxnNo,
-            "originalTxnNo"    => $merchantTxnNo,
-            "transactionType"  => "STATUS",
-            "amount"           => $amount,
+            "merchantID" => $merchantId,
+            "merchantTxnNo" => $merchantTxnNo,
+            "originalTxnNo" => $merchantTxnNo,
+            "transactionType" => "STATUS",
+            "amount" => $amount,
         ];
         // Step 1: Sort params by key name in ascending order
         ksort($params);
@@ -310,35 +265,35 @@ class AdminController extends Controller
         // 🔑 Replace this with the actual key shared by PhiCommerce
         $secretKey = 'abc'; //"YOUR_SECRET_KEY_HERE";
         // Step 3: Generate HMAC SHA256 hash
-        $hash = hash_hmac("sha256", $concatenated, $secretKey);        
+        $hash = hash_hmac("sha256", $concatenated, $secretKey);
         // Step 4: Convert to lowercase HEX (hash_hmac already returns lowercase)
         $secureHash = strtolower($hash);
         // CALL STATUS CHECK API
-        $client = new Client(); 
+        $client = new Client();
         $response = $client->post('https://qa.phicommerce.com/pg/api/command', [
             'multipart' => [
                 [
-                    'name'     => 'merchantID',
+                    'name' => 'merchantID',
                     'contents' => $merchantId
                 ],
                 [
-                    'name'     => 'merchantTxnNo',
+                    'name' => 'merchantTxnNo',
                     'contents' => $merchantTxnNo
                 ],
                 [
-                    'name'     => 'originalTxnNo',
+                    'name' => 'originalTxnNo',
                     'contents' => $merchantTxnNo
                 ],
                 [
-                    'name'     => 'transactionType',
+                    'name' => 'transactionType',
                     'contents' => 'STATUS'
                 ],
                 [
-                    'name'     => 'secureHash',
+                    'name' => 'secureHash',
                     'contents' => $secureHash
                 ],
                 [
-                    'name'     => 'amount',
+                    'name' => 'amount',
                     'contents' => $amount
                 ],
             ],
@@ -368,15 +323,16 @@ class AdminController extends Controller
         // ERR – Error in transaction process
         $response = $response->getBody();
         $response = json_decode($response);
-        if($response->txnResponseCode == "0000" && $response->txnStatus == 'SUC'){
-            
+        if ($response->txnResponseCode == "0000" && $response->txnStatus == 'SUC') {
+
             return $this->successResponse(null, 'Payment completed successfully');
-        }else{
+        } else {
             return $this->errorResponse('Something went wrong');
         }
     }
 
-    public function test(){
+    public function test()
+    {
 
         /*$cClientId = get_env_variable('CASHFREE_PAYMENT_LIVE_CLIENTID');
         $cSecretId = get_env_variable('CASHFREE_PAYMENT_LIVE_CLIENTSECRET');
@@ -423,7 +379,7 @@ class AdminController extends Controller
                             $cashfreeTax = $responseBody['service_tax'] ?? 0;
                             $cashfreeCharges = $cashfreeFees + $cashfreeTax;
                             //$cashfreeCharges = round($cashfreeCharges);
-                            
+
                         //}catch(Exception $e){}
                         $value->payment_gateway_charges = $cashfreeCharges;
                         $value->status = 'captured';
@@ -442,7 +398,7 @@ class AdminController extends Controller
                     try {
                         $orderStatus = $api->order->fetch($value->razorpay_order_id)->payments();
                     } catch (\Razorpay\Api\Errors\Error $e) {
-                        
+
                     }
 
                     if(is_countable($orderStatus['items']) && count($orderStatus['items']) > 0){

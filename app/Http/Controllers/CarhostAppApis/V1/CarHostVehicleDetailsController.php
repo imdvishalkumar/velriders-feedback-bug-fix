@@ -797,7 +797,7 @@ class CarHostVehicleDetailsController extends Controller
                 $vehicleTypeName = $vehicle->model->category->vehicleType->name ?? null;
                 $durationHoursLimit = calculateKmLimit($v->hours, $vehicleTypeName);
                 $pricingShowCase[$k]['duration'] = $duration;
-                $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." Km )";
+                $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2) . " ( " . $durationHoursLimit . " Km )";
                 // $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format($tripAmount, 2);
                 $pricingShowCase[$k]['duration_hours_limit'] = "( " . $durationHoursLimit . " Km )";
                 $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);

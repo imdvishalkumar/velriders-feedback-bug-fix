@@ -60,12 +60,12 @@ class CustomerDocumentController extends Controller
             'id_number' => [
                 'required',
                 'string',
-                Rule::unique('customer_documents')->where(function ($query) {
-                    return $query->where(function ($query) {
-                        $query->where('is_approved', 'approved')
-                            ->orWhere('is_blocked', 1);
-                    });
-                }),
+                // Rule::unique('customer_documents')->where(function ($query) {
+                //     return $query->where(function ($query) {
+                //         $query->where('is_approved', 'approved')
+                //             ->orWhere('is_blocked', 1);
+                //     });
+                // }),
             ],
             'front_image' => 'required|mimetypes:image/heic,image/heif,image/jpeg,image/png,image/jpg,image/bmp,image/gif,image/svg,image/webp|max:10000',
         ], [
@@ -253,6 +253,14 @@ class CustomerDocumentController extends Controller
                         $statusCode = $aadharResponse->getStatusCode();
                         $content = $aadharResponse->getBody()->getContents();
                         $content = json_decode($content);
+                        Log::info('Aadhaar API Raw Response', [
+                            'status_code' => $statusCode,
+                            'raw_response' => $content,
+                        ]);
+
+                        Log::info('Aadhaar API Decoded Response', [
+                            'decoded_response' => $content,
+                        ]);
                         $refId = '';
                         if ($content != '' && isset($content->status) && $content->status != '' && strtolower($content->status) == 'success') {
                             $refId = isset($content->ref_id) ? $content->ref_id : '';
@@ -554,12 +562,12 @@ class CustomerDocumentController extends Controller
             'id_number' => [
                 'required',
                 'string',
-                Rule::unique('customer_documents')->where(function ($query) {
-                    return $query->where(function ($query) {
-                        $query->where('is_approved', 'approved')
-                            ->orWhere('is_blocked', 1);
-                    });
-                }),
+                // Rule::unique('customer_documents')->where(function ($query) {
+                //     return $query->where(function ($query) {
+                //         $query->where('is_approved', 'approved')
+                //             ->orWhere('is_blocked', 1);
+                //     });
+                // }),
             ],
             'ref_id' => 'required',
             'otp' => 'required',

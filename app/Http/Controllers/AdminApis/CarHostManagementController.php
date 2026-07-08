@@ -698,6 +698,9 @@ class CarHostManagementController extends Controller
             $carHostPickupLocation->is_primary = 1;
             $carHostPickupLocation->save();
 
+            CarEligibility::where('car_hosts_id', $carHostPickupLocation->car_hosts_id)
+                ->update(['car_host_pickup_location_id' => $carHostPickupLocation->id]);
+
             logAdminActivities('Set car host pickup location as Primary', $oldVal);
             return $this->successResponse($carHostPickupLocation, 'Car host Pickup Location set as Primary Successfully');
         }else{

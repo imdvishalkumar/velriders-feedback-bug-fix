@@ -266,6 +266,7 @@ class RentalBookingController extends Controller
         $rentalBooking->rental_duration_minutes = $tripDurationMinutes;
         $rentalBooking->unlimited_kms = $request->input('unlimited_kms', false);
         $rentalBooking->total_cost = $rentalCostDetails['total_amount'];
+        $rentalBooking->commission_percent = $vehicleCommissionPercent;
         $rentalBooking->status = 'pending'; // or any other default status
         $rentalBooking->rental_type = $request->rental_type ?? 'default'; // or any other default rental type
         $rentalBooking->save();
@@ -657,7 +658,7 @@ class RentalBookingController extends Controller
         $tripDurationMinutes = $endDate->diffInMinutes($startDate);
         $vehicle = $rentalBooking->vehicle;
         $typeId = $vehicle->model->category->vehicleType->type_id ?? NULL;
-        $vehicleCommissionPercent = $vehicle->commission_percent ?? 0;
+        $vehicleCommissionPercent = $rentalBooking->commission_percent ?? $vehicle->commission_percent ?? 0;
         $rentalPrice = $vehicle->rental_price;
         $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
         if (is_countable($checkOffer) && count($checkOffer) > 0) {
@@ -760,7 +761,7 @@ class RentalBookingController extends Controller
         $tripDurationMinutes = $endDate->diffInMinutes($startDate);
         $vehicle = $rentalBooking->vehicle;
         $typeId = $vehicle->model->category->vehicleType->type_id ?? NULL;
-        $vehicleCommissionPercent = $vehicle->commission_percent ?? 0;
+        $vehicleCommissionPercent = $rentalBooking->commission_percent ?? $vehicle->commission_percent ?? 0;
         $rentalPrice = $vehicle->rental_price;
         $setting = Setting::first();
         $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
@@ -1150,7 +1151,7 @@ class RentalBookingController extends Controller
             if ($rentalBooking->vehicle->properties) {
                 $rentalBooking->vehicle->makeHidden(['properties', 'features']);
             }
-            $rentalBooking->setHidden(['customer_id', 'to_branch_id', 'rental_duration_minutes', 'unlimited_kms', 'total_cost', 'amount_paid', 'rental_type', 'start_otp', 'end_otp', 'start_datetime', 'end_datetime', 'sequence_no', 'penalty_details', 'status_map', 'data_json', 'created_at', 'updated_at', 'pay_now_status', 'admin_penalty_amount']);
+            $rentalBooking->setHidden(['customer_id', 'to_branch_id', 'rental_duration_minutes', 'unlimited_kms', 'total_cost', 'amount_paid', 'rental_type', 'start_otp', 'end_otp', 'start_datetime', 'end_datetime', 'sequence_no', 'penalty_details', 'status_map', 'data_json', 'created_at', 'updated_at', 'admin_penalty_amount']);
 
             // Convert to JSON
             $rentalBookingArray = json_decode(json_encode($rentalBooking), FALSE);
@@ -1346,7 +1347,7 @@ class RentalBookingController extends Controller
         $totalPenalty = $adminPenaltyAmount + $exceededKilometerPenalty + $exceededHourPenalty;
         $vehicleCommissionTaxAmt = $vehicleCommissionAmt = 0;
         if ($totalPenalty > 0) {
-            $vehicleCommissionPercent = $booking->vehicle->commission_percent ?? 0;
+            $vehicleCommissionPercent = $booking->commission_percent ?? $booking->vehicle->commission_percent ?? 0;
             if ($vehicleCommissionPercent > 0) {
                 $vehicleCommissionAmt = ($totalPenalty * $vehicleCommissionPercent) / 100;
                 $vehicleCommissionAmt = round($vehicleCommissionAmt);
@@ -1800,7 +1801,7 @@ class RentalBookingController extends Controller
                     if (isset($value->coupon_discount) && $value->coupon_discount != 0) {
                         $mainAmt = $value->trip_amount - $value->coupon_discount;
                     }
-                    $vehiclePercent = $value->rentalBooking->vehicle->commission_percent ?? 0;
+                    $vehiclePercent = $value->rentalBooking->commission_percent ?? $value->rentalBooking->vehicle->commission_percent ?? 0;
                     $taxPercent = getTaxPercent($mainAmt, $value->tax_amt, $value->trip_amount_to_pay, $vehiclePercent, $gstPercent, $commissionTaxAmount);
 
                     $newBooking['tax_percent'] = number_format($taxPercent, 2);
@@ -1828,7 +1829,7 @@ class RentalBookingController extends Controller
                     if (isset($value->coupon_discount) && $value->coupon_discount != 0) {
                         $mainAmt = $value->trip_amount - $value->coupon_discount;
                     }
-                    $vehiclePercent = $value->rentalBooking->vehicle->commission_percent ?? 0;
+                    $vehiclePercent = $value->rentalBooking->commission_percent ?? $value->rentalBooking->vehicle->commission_percent ?? 0;
                     $taxPercent = getTaxPercent($mainAmt, $value->tax_amt, $value->trip_amount_to_pay, $vehiclePercent, $gstPercent, $commissionTaxAmount);
 
                     $extension['tax_percent'][] = number_format($taxPercent, 2);
@@ -1885,7 +1886,7 @@ class RentalBookingController extends Controller
                     if (isset($value->coupon_discount) && $value->coupon_discount != 0) {
                         $mainAmt = $value->trip_amount - $value->coupon_discount;
                     }
-                    $vehiclePercent = $value->rentalBooking->vehicle->commission_percent ?? 0;
+                    $vehiclePercent = $value->rentalBooking->commission_percent ?? $value->rentalBooking->vehicle->commission_percent ?? 0;
                     $taxPercent = getTaxPercent($mainAmt, $value->tax_amt, $value->trip_amount_to_pay, $vehiclePercent, $gstPercent, $commissionTaxAmount);
 
                     $completion['tax_percent'] = number_format($taxPercent, 2);
@@ -1922,7 +1923,7 @@ class RentalBookingController extends Controller
                             $mainAmt = $value->total_amount - $value->coupon_discount;
                         }
                         $paidPenalties['trip_amount'][] = number_format($value->total_amount ?? 0, 2);
-                        $vehiclePercent = $value->rentalBooking->vehicle->commission_percent ?? 0;
+                        $vehiclePercent = $value->rentalBooking->commission_percent ?? $value->rentalBooking->vehicle->commission_percent ?? 0;
                         $paidPenalties['tax_percent'][] = getTaxPercent($mainAmt, $value->tax_amt, $mainAmt, $vehiclePercent, $gstPercent, $commissionTaxAmount);
                         $paidPenalties['tax_amount'][] = number_format($value->tax_amt ?? 0, 2);
                         $paidPenalties['coupon_discount'][] = number_format(0, 2);
@@ -1949,7 +1950,7 @@ class RentalBookingController extends Controller
                         $mainAmt = $value->total_amount - $value->coupon_discount;
                     }
                     $duePenalties['trip_amount'][] = number_format($value->total_amount ?? 0, 2);
-                    $vehiclePercent = $value->rentalBooking->vehicle->commission_percent ?? 0;
+                    $vehiclePercent = $value->rentalBooking->commission_percent ?? $value->rentalBooking->vehicle->commission_percent ?? 0;
                     $taxPercent = ($gstPercent == 0.05) ? 5 : (($gstPercent == 0.18) ? 18 : 0);
                     $duePenalties['tax_percent'][] = $taxPercent;
                     // OLD CODE
@@ -2212,23 +2213,23 @@ class RentalBookingController extends Controller
             $summaryTable = $this->buildPricingTable($pricingShowCase);
             return $this->successResponse(['table_html' => $summaryTable], 'Pricing show case retrieved successfully.');
         } /*elseif(is_countable($vehiclePricingControl) && count($vehiclePricingControl) > 0) {
-        foreach($vehiclePricingControl as $k => $v){
-            if($v->trip_amount > 0){
-                $tripAmount = $v->trip_amount;
-                $unKMtripAmount = ($v->trip_amount) * 1.3;
-                $perHourRate = $v->per_hour_rate; // Calculate per hour rate based on the total trip amount and duration
-                $duration = $v->duration;
-                $durationHoursLimit = $v->trip_amount_km_limit;
-                //$pricingShowCase = [];
-                $pricingShowCase[$k]['duration'] = $duration;
-                $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." )";
-                $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);
-                $pricingShowCase[$k]['per_hour_rate'] = '₹' . number_format(($perHourRate), 2);
-            }
-        }
-        $summaryTable = $this->buildPricingTable($pricingShowCase);          
-        return $this->successResponse(['table_html' => $summaryTable], 'Pricing show case retrieved successfully.');
-    }*/ else {
+       foreach($vehiclePricingControl as $k => $v){
+           if($v->trip_amount > 0){
+               $tripAmount = $v->trip_amount;
+               $unKMtripAmount = ($v->trip_amount) * 1.3;
+               $perHourRate = $v->per_hour_rate; // Calculate per hour rate based on the total trip amount and duration
+               $duration = $v->duration;
+               $durationHoursLimit = $v->trip_amount_km_limit;
+               //$pricingShowCase = [];
+               $pricingShowCase[$k]['duration'] = $duration;
+               $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." )";
+               $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);
+               $pricingShowCase[$k]['per_hour_rate'] = '₹' . number_format(($perHourRate), 2);
+           }
+       }
+       $summaryTable = $this->buildPricingTable($pricingShowCase);          
+       return $this->successResponse(['table_html' => $summaryTable], 'Pricing show case retrieved successfully.');
+   }*/ else {
             $rules = TripAmountCalculationRule::select('id', 'hours', 'multiplier')->orderBy('hours', 'desc')->get();
             $summaryTable = [];
             if (is_countable($rules) && count($rules) > 0) {

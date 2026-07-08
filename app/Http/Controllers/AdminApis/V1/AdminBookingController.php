@@ -303,17 +303,17 @@ class AdminBookingController extends Controller
         $validator = Validator::make($request->all(), [
             'booking_id' => 'required|exists:rental_bookings,booking_id',
             'end_km' => 'required|integer|min:1|regex:/^\d{1,7}$/',
+            'end_date_time' => 'nullable',
+            'admin_penalty' => 'nullable|numeric',
+            'exceed_km_limit' => 'nullable|numeric',
+            'exceed_hours_limit' => 'nullable|numeric',
+            'final_amount_inc_tax' => 'nullable|numeric',
+            'final_amount_inc_tax_status' => 'nullable|integer',
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
 
-        $data['admin_penalty'] = '';
-        $data['admin_penalty_info'] = '';
-        $data['admin_penalty_id'] = '';
-        $data['exceed_km_limit'] = '';
-        $data['exceed_hour_limit'] = '';
-        $data['tax_amt'] = '';
         $booking = RentalBooking::select('booking_id', 'customer_id', 'end_otp', 'vehicle_id', 'end_datetime', 'pickup_date', 'return_date', 'unlimited_kms', 'start_kilometers', 'end_kilometers', 'start_datetime', 'end_datetime', 'status', 'rental_duration_minutes', 'tax_rate')->where('booking_id', $request->booking_id)->first();
         if (!$booking) {
             return $this->errorResponse('Invalid Booking');
@@ -321,20 +321,12 @@ class AdminBookingController extends Controller
         if (isset($request->end_km) && $request->end_km != '' && $request->end_km <= $booking->start_kilometers) {
             return $this->errorResponse("Please enter an End Kilometer value higher than the Start Kilometer.");
         }
-        // $booking->end_kilometers = $request->end_km ?? 0;
-        // $booking->end_datetime = now();
-        // $booking->end_otp = null;
-        // $booking->save();
-        // if($request->end_date_time != ''){
-        //     $booking->end_datetime = Carbon::parse($request->end_date_time);
-        //     $booking->save();    
-        // }
 
         $endTimeCal = isset($request->end_date_time) && $request->end_date_time != '' ? Carbon::parse($request->end_date_time) : now();
         $endKilometers = $booking->end_kilometers ? $booking->end_kilometers : $request->end_km;
         $endDatetime = $booking->end_datetime ? $booking->end_datetime : $endTimeCal;
 
-        $adminPenaltyAmount = $exceededHourPenalty = 0;
+        $adminPenaltyAmount = 0;
         $penaltyInfo = $adminPenaltyId = '';
         $adminPenalties = AdminPenalty::where(['booking_id' => $request->booking_id, 'is_paid' => 0])->where('amount', '!=', 0)->first();
         if ($adminPenalties != '') {
@@ -342,6 +334,7 @@ class AdminBookingController extends Controller
             $penaltyInfo = $adminPenalties->penalty_details ?? '';
             $adminPenaltyId = $adminPenalties->id;
         }
+
         // Calculate penalties based on trip duration and distance
         $pickupDateTime = Carbon::parse($booking->pickup_date);
         $returnDateTime = Carbon::parse($booking->return_date);
@@ -350,16 +343,14 @@ class AdminBookingController extends Controller
         if (!$booking->unlimited_kms) {
             $vehicleTypeName = $booking->vehicle->model->category->vehicleType->name ?? null;
             $kilometerLimit = calculateKmLimit($tripDurationHours, $vehicleTypeName);
-            //$kilometerDifference = $booking->end_kilometers - $booking->start_kilometers;
             $kilometerDifference = $endKilometers - $booking->start_kilometers;
             $exceededKilometerPenalty = max(0, ($kilometerDifference - $kilometerLimit) * ($booking->vehicle->extra_km_rate ?? 0));
         }
-        // $actualTripDurationMinutes = Carbon::parse($booking->end_datetime)->diffInMinutes($booking->start_datetime);
-        // $endDateTime = Carbon::parse($booking->end_datetime);
+
+        $exceededHourPenalty = 0;
         $actualTripDurationMinutes = Carbon::parse($endDatetime)->diffInMinutes($booking->start_datetime);
         $endDateTime = Carbon::parse($endDatetime);
         if ($endDateTime->greaterThan($returnDateTime)) {
-            // If end_datetime is greater than return_date, calculate the exceeded minutes
             $exceededMinutes = $endDateTime->diffInMinutes($returnDateTime);
             $exceededHourPenalty = max(0, ($exceededMinutes * ($booking->vehicle->extra_hour_rate ?? 0) / 60));
             if ($booking && $booking->unlimited_kms == 1) {
@@ -367,32 +358,61 @@ class AdminBookingController extends Controller
             }
         }
 
-        // Calculate final penalty and refundable amount
-        $data['admin_penalty'] = round($adminPenaltyAmount);
-        $data['admin_penalty_info'] = $penaltyInfo;
-        $data['admin_penalty_id'] = $adminPenaltyId;
-        $data['exceed_km_limit'] = round($exceededKilometerPenalty);
-        $data['exceed_hour_limit'] = round($exceededHourPenalty);
+        // If manual penalty/km/hours are passed, use them, otherwise use calculated values
+        $adminPenalty = isset($request->admin_penalty) ? (float) $request->admin_penalty : round($adminPenaltyAmount);
+        $exceedKmLimit = isset($request->exceed_km_limit) ? (float) $request->exceed_km_limit : round($exceededKilometerPenalty);
+        $exceedHourLimit = isset($request->exceed_hours_limit) ? (float) $request->exceed_hours_limit : round($exceededHourPenalty);
 
-        // Calculate the tax on the penalty amounts using the same formula
-        // applied when the journey is completed (see end_journey in getPriceSummary).
         $taxRate = $booking->tax_rate ?? 0;
         $customer = Customer::where('customer_id', $booking->customer_id)->first();
         $customerGst = $customer->gst_number ?? '';
         if ($taxRate <= 0) {
             $taxRate = $customerGst ? 0.18 : 0.05;
         }
-        $totalPenalty = (float) $data['admin_penalty'] + (float) $data['exceed_km_limit'] + (float) $data['exceed_hour_limit'];
-        $vehicleCommissionTaxAmt = 0;
-        if ($totalPenalty > 0) {
-            $vehicleCommissionPercent = $booking->vehicle->commission_percent ?? 0;
-            if ($vehicleCommissionPercent > 0) {
-                $vehicleCommissionAmt = round(($totalPenalty * $vehicleCommissionPercent) / 100);
+
+        $vehicleCommissionPercent = $booking->vehicle->commission_percent ?? 0;
+        $K = $taxRate + ($vehicleCommissionPercent / 100) * 0.18;
+
+        if ($request->final_amount_inc_tax_status == 1 && isset($request->final_amount_inc_tax) && (float) $request->final_amount_inc_tax > 0) {
+            $finalAmtInput = (float) $request->final_amount_inc_tax;
+            $P_base_new = $finalAmtInput / (1 + $K);
+            $P_base_old = (float) $adminPenalty + (float) $exceedKmLimit + (float) $exceedHourLimit;
+
+            if ($P_base_old > 0) {
+                $ratio = $P_base_new / $P_base_old;
+                $adminPenalty = round($adminPenalty * $ratio, 2);
+                $exceedKmLimit = round($exceedKmLimit * $ratio, 2);
+                $exceedHourLimit = round($exceedHourLimit * $ratio, 2);
+            } else {
+                $adminPenalty = round($P_base_new, 2);
+                $exceedKmLimit = 0.0;
+                $exceedHourLimit = 0.0;
+            }
+            $P_base_final = $adminPenalty + $exceedKmLimit + $exceedHourLimit;
+            $taxAmt = round($finalAmtInput - $P_base_final, 2);
+            $finalAmountIncTax = $finalAmtInput;
+        } else {
+            $P_base_final = $adminPenalty + $exceedKmLimit + $exceedHourLimit;
+            $vehicleCommissionTaxAmt = 0;
+            if ($P_base_final > 0 && $vehicleCommissionPercent > 0) {
+                $vehicleCommissionAmt = round(($P_base_final * $vehicleCommissionPercent) / 100);
                 $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
             }
+            $taxAmt = ($P_base_final * $taxRate) + $vehicleCommissionTaxAmt;
+            $taxAmt = round($taxAmt, 2);
+            $finalAmountIncTax = round($P_base_final + $taxAmt, 2);
         }
-        $taxAmt = ($totalPenalty * $taxRate) + $vehicleCommissionTaxAmt;
-        $data['tax_amt'] = round($taxAmt, 2);
+
+        $data = [
+            'admin_penalty' => $adminPenalty,
+            'admin_penalty_info' => $penaltyInfo,
+            'admin_penalty_id' => $adminPenaltyId,
+            'exceed_km_limit' => $exceedKmLimit,
+            'exceed_hour_limit' => $exceedHourLimit,
+            'tax_amt' => $taxAmt,
+            'final_amount_inc_tax' => $finalAmountIncTax,
+            'final_amount' => $finalAmountIncTax,
+        ];
 
         return $this->successResponse($data, "Penalty details are get successfully");
     }
@@ -2036,19 +2056,50 @@ class AdminBookingController extends Controller
             if ($taxRate <= 0) {
                 $taxRate = $customerGst ? 0.18 : 0.05;
             }
-            $totalPenalty = (float) $adminPenalty + (float) $exceedKmLimit + (float) $exceedHourLimit;
-            $vehicleCommissionTaxAmt = $vehicleCommissionAmt = 0;
-            if ($totalPenalty > 0) {
-                $vehicleCommissionPercent = $rentalBooking->vehicle->commission_percent ?? 0;
-                if ($vehicleCommissionPercent > 0) {
-                    $vehicleCommissionAmt = ($totalPenalty * $vehicleCommissionPercent) / 100;
-                    $vehicleCommissionAmt = round($vehicleCommissionAmt);
+
+            $vehicleCommissionPercent = $rentalBooking->vehicle->commission_percent ?? 0;
+            $K = $taxRate + ($vehicleCommissionPercent / 100) * 0.18;
+
+            if ($request->final_amount_inc_tax_status == 1 && isset($request->final_amount_inc_tax) && (float) $request->final_amount_inc_tax > 0) {
+                $finalAmtInput = (float) $request->final_amount_inc_tax;
+                $P_base_new = $finalAmtInput / (1 + $K);
+                $P_base_old = (float) $adminPenalty + (float) $exceedKmLimit + (float) $exceedHourLimit;
+
+                if ($P_base_old > 0) {
+                    $ratio = $P_base_new / $P_base_old;
+                    $adminPenalty = round($adminPenalty * $ratio, 2);
+                    $exceedKmLimit = round($exceedKmLimit * $ratio, 2);
+                    $exceedHourLimit = round($exceedHourLimit * $ratio, 2);
+                } else {
+                    $adminPenalty = round($P_base_new, 2);
+                    $exceedKmLimit = 0.0;
+                    $exceedHourLimit = 0.0;
+                }
+                $P_base_final = $adminPenalty + $exceedKmLimit + $exceedHourLimit;
+                $taxAmt = round($finalAmtInput - $P_base_final, 2);
+                $totalPenalty = $finalAmtInput;
+                $finalAmountIncTax = $finalAmtInput;
+            } else {
+                $P_base_final = $adminPenalty + $exceedKmLimit + $exceedHourLimit;
+                $vehicleCommissionTaxAmt = 0;
+                if ($P_base_final > 0 && $vehicleCommissionPercent > 0) {
+                    $vehicleCommissionAmt = round(($P_base_final * $vehicleCommissionPercent) / 100);
                     $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
                 }
+                $taxAmt = ($P_base_final * $taxRate) + $vehicleCommissionTaxAmt;
+                $taxAmt = round($taxAmt, 2);
+                $totalPenalty = round($P_base_final + $taxAmt, 2);
+                $finalAmountIncTax = $totalPenalty;
             }
-            $taxAmt = $totalPenalty * $taxRate;
-            $taxAmt += $vehicleCommissionTaxAmt;
-            $totalPenalty = $totalPenalty + $taxAmt;
+
+            // Calculate commission amounts to store in completion transaction
+            $vehicleCommissionTaxAmt = $vehicleCommissionAmt = 0;
+            $P_base_final = $adminPenalty + $exceedKmLimit + $exceedHourLimit;
+            if ($P_base_final > 0 && $vehicleCommissionPercent > 0) {
+                $vehicleCommissionAmt = round(($P_base_final * $vehicleCommissionPercent) / 100);
+                $vehicleCommissionTaxAmt = ($vehicleCommissionAmt * 18) / 100;
+            }
+
             // Retrieve refundable deposit from booking_transactions
             $initialTransaction = BookingTransaction::where('booking_id', $rentalBooking->booking_id)->where('type', 'new_booking')->first();
             $refundable_deposit = $initialTransaction->refundable_deposit ?? 0;
@@ -2077,6 +2128,8 @@ class AdminBookingController extends Controller
                 'refundable_deposit' => $payNow ? 0 : $remainingRefundableAmount,
                 'tax_amt' => round($taxAmt, 2),
                 'amount_to_pay' => round($amount_to_pay, 2),
+                'final_amount' => round($totalPenalty, 2),
+                'final_amount_inc_tax' => round($finalAmountIncTax, 2),
                 'order_type' => 'completion',
                 'paid' => 1,
                 'razorpay_order_id' => '',
@@ -2214,7 +2267,7 @@ class AdminBookingController extends Controller
             return $this->successResponse($cancelRentalBooking, "Cancellation of the booking has been successfully reversed.");
         }
     }
-    
+
     public function uploadBookingImages(Request $request)
     {
         $validator = Validator::make($request->all(), [

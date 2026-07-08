@@ -35,16 +35,16 @@ class CheckPendingPayment extends Command
         $oneHourAgo = $currentDateTime->subHour();
 
         RentalBooking::where('return_date', '<', $oneHourAgo)
-        ->where('status', 'confirmed')
-        ->update(['status' => 'no show']);
+            ->where('status', 'confirmed')
+            ->update(['status' => 'no show']);
 
         //NEW CODE
         $cutoffTime = Carbon::now()->subHour(12);
         $allPayments = Payment::where(['status' => 'pending', 'payment_env' => 'live'])->where('created_at', '>=', $cutoffTime)->get();
-        if(is_countable($allPayments) && count($allPayments) > 0){
-            foreach($allPayments as $key => $value){
+        if (is_countable($allPayments) && count($allPayments) > 0) {
+            foreach ($allPayments as $key => $value) {
                 $paymentGateway = $value->payment_gateway_used;
-                if(strtolower($paymentGateway) == 'cashfree'){
+                if (strtolower($paymentGateway) == 'cashfree') {
                     $cClientId = $cSecretId = $cUrl = '';
                     $orderId = $value->cashfree_order_id;
                     $cClientId = get_env_variable('CASHFREE_PAYMENT_LIVE_CLIENTID');
@@ -65,25 +65,27 @@ class CheckPendingPayment extends Command
                         $body = $response->getBody()->getContents();
                         $responseData = json_decode($body, true);
                         if ($responseData && isset($responseData['order_amount'])) {
-                            if($value->amount == $responseData['order_amount'] && strtolower($responseData['order_status']) == 'paid'){
+                            if ($value->amount == $responseData['order_amount'] && strtolower($responseData['order_status']) == 'paid') {
                                 $value->status = 'captured';
                                 $value->save();
                                 $rentalBooking = RentalBooking::where('booking_id', $value->booking_id)->first();
                                 $rentalBooking->processCashfreePayment($value);
-                                if(strtolower($value->payment_gateway_used) == 'cashfree' && $responseData['order_id'] != ''){
+                                if (strtolower($value->payment_gateway_used) == 'cashfree' && $responseData['order_id'] != '') {
                                     $adminPenalty = AdminPenalty::where('is_paid', 0)->where('booking_id', $value->booking_id)->where('cashfree_order_id', $responseData['order_id'])->first();
-                                    if($adminPenalty != ''){
+                                    if ($adminPenalty != '') {
                                         $adminPenalty->is_paid = 1;
-                                        $adminPenalty->save();    
+                                        $adminPenalty->save();
                                     }
                                 }
-                               // Log::error("Cashfree Order is paid successfully - ". $value->payment_id);
+                                // Log::error("Cashfree Order is paid successfully - ". $value->payment_id);
                             } else {
-                               // Log::error("Your cashfree order is in Active Mode not yet completed - ". $value->payment_id);
+                                // Log::error("Your cashfree order is in Active Mode not yet completed - ". $value->payment_id);
                             }
                         }
-                    } catch(Exception $e) { Log::error($e->getMessage()); } 
-                }elseif(strtolower($paymentGateway) == 'razorpay'){
+                    } catch (Exception $e) {
+                        Log::error($e->getMessage());
+                    }
+                } elseif (strtolower($paymentGateway) == 'razorpay') {
                     $rKey = get_env_variable('RAZORPAY_API_LIVE_KEY');
                     $rSecret = get_env_variable('RAZORPAY_API_LIVE_SECRET');
                     $api = new Api($rKey, $rSecret);
@@ -94,10 +96,10 @@ class CheckPendingPayment extends Command
                     } catch (\Razorpay\Api\Errors\Error $e) {
                         Log::error($e->getMessage());
                     }
-                    if(is_countable($orderStatus['items']) && count($orderStatus['items']) > 0){
+                    if (is_countable($orderStatus['items']) && count($orderStatus['items']) > 0) {
                         $items = $orderStatus->toArray();  // Convert the collection to an array
-                        $items = $items['items'] ?? [];  
-                        $capturedOrAuthorized = array_filter($items, function($v) {
+                        $items = $items['items'] ?? [];
+                        $capturedOrAuthorized = array_filter($items, function ($v) {
                             return !empty($v['status']) && in_array($v['status'], ['captured', 'authorized']) && !empty($v['id']);
                         });
                         if (!empty($capturedOrAuthorized)) {
@@ -116,22 +118,22 @@ class CheckPendingPayment extends Command
 
                             // if(strtolower($payment->payment_gateway_used) == 'razorpay' && $orderId != ''){
                             //     $adminPenalty = AdminPenalty::where('is_paid', 0)->where('booking_id', $payment->booking_id)->where('razorpay_order_id', $orderId)->first();
-                            if(strtolower($value->payment_gateway_used) == 'razorpay' && $orderId != ''){
+                            if (strtolower($value->payment_gateway_used) == 'razorpay' && $orderId != '') {
                                 $adminPenalty = AdminPenalty::where('is_paid', 0)->where('booking_id', $value->booking_id)->where('razorpay_order_id', $orderId)->first();
-                                if($adminPenalty != ''){
+                                if ($adminPenalty != '') {
                                     $adminPenalty->is_paid = 1;
-                                    $adminPenalty->save();    
+                                    $adminPenalty->save();
                                 }
                             }
-                           // Log::error("Razorpay Order is paid successfully - ". $value->payment_id);
+                            // Log::error("Razorpay Order is paid successfully - ". $value->payment_id);
                         } else {
-                           // Log::error("Your razorpay order not yet completed - ". $value->payment_id);
+                            // Log::error("Your razorpay order not yet completed - ". $value->payment_id);
                         }
                     }
                 }
             }
         }
-            
+
         /*------------------------------*/
         // $rKey = getRazorpayKey();
         // $rSecret = getRazorpaySecret();

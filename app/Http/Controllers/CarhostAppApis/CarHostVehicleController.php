@@ -435,7 +435,13 @@ class CarHostVehicleController extends Controller
                 $carPickupLocationTemp->longitude = (double)$request->longitude ?? 0.00;
                 $carPickupLocationTemp->location = $request->location;
                 $carPickupLocationTemp->parking_type_id = (int)$request->parking_type;
-                $carPickupLocationTemp->city_id = $vehicle->temp_city_id ?? NULL;
+                if ($request->latitude != '' && $request->longitude != '') {
+                    $nearestBranch = City::nearest($request->latitude, $request->longitude);
+                    $carPickupLocationTemp->city_id = $nearestBranch?->id ?? $vehicle->temp_city_id ?? NULL;
+                    $carPickupLocationTemp->name = $nearestBranch?->name ?? '';
+                } else {
+                    $carPickupLocationTemp->city_id = $vehicle->temp_city_id ?? NULL;
+                }
                
                 $carPickupLocationTemp->is_primary = 1; 
                 $carPickupLocationTemp->save();
@@ -465,7 +471,13 @@ class CarHostVehicleController extends Controller
             $carPickupLocation->longitude = (double)$request->longitude ?? 0.00;
             $carPickupLocation->location = $request->location;
             $carPickupLocation->parking_type_id = (int)$request->parking_type;
-            $carPickupLocation->city_id = $vehicle->temp_city_id ?? NUll;
+            if ($request->latitude != '' && $request->longitude != '') {
+                $nearestBranch = City::nearest($request->latitude, $request->longitude);
+                $carPickupLocation->city_id = $nearestBranch?->id ?? $vehicle->temp_city_id ?? NULL;
+                $carPickupLocation->name = $nearestBranch?->name ?? '';
+            } else {
+                $carPickupLocation->city_id = $vehicle->temp_city_id ?? NULL;
+            }
            
             $primaryStatus = $request->is_primary;
             $locationStatus = false;

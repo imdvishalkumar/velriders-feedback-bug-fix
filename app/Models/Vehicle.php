@@ -268,7 +268,7 @@ class Vehicle extends Model
             }
         } else if ($this->branch_id == '') {
             // $branch = CarHostPickupLocation::with('carEligibility', 'carEligibility.carHost')->where('vehicles_id', $this->vehicle_id)->where('is_primary', 1)->first();
-            $carEligibility = CarEligibility::where('vehicle_id', $this->vehicle_id)->with('vehiclePickupLocation')->first();
+            $carEligibility = CarEligibility::where('vehicle_id', $this->vehicle_id)->with(['vehiclePickupLocation', 'vehiclePickupLocation.city'])->first();
             $managerName = $phone = '';
             if ($carEligibility != '' && $carEligibility->vehiclePickupLocation) {
                 if ($carEligibility && $carEligibility->carHost) {
@@ -276,7 +276,7 @@ class Vehicle extends Model
                     $managerName .= ' ' . $carEligibility->carHost->lastname ?? '';
                     $phone = $carEligibility->carHost->mobile_number ?? '';
                 }
-                $location['name'] = $carEligibility->vehiclePickupLocation->name ?? '';
+                $location['name'] = $carEligibility->vehiclePickupLocation->name ?? ($carEligibility->vehiclePickupLocation->city?->name ?? '');
                 $location['manager_name'] = $managerName;
                 $location['address'] = $carEligibility->vehiclePickupLocation->location ?? '';
                 $location['latitude'] = (double) $carEligibility->vehiclePickupLocation->latitude ?? 0.00;

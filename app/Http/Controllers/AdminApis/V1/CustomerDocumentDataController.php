@@ -12,6 +12,7 @@ use Illuminate\Validation\Rule;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 
 class CustomerDocumentDataController extends Controller
 {
@@ -137,6 +138,8 @@ class CustomerDocumentDataController extends Controller
                 $customerDocuments[$key]['expire_date'] = $value->expiry_date;
                 $customerDocuments[$key]['approved_by'] = $value->approved_by;
                 $customerDocuments[$key]['reject_message'] = $rejectMessage;
+                $customerDocuments[$key]['custom_rejection_message'] = $value->custom_rejection_message;
+                $customerDocuments[$key]['rejection_message_id'] = $value->rejection_message_id;
                 $customerDocuments[$key]['vehicle_type'] = $value->vehicle_type;
                 $customerDocuments[$key]['status'] = $value->is_approved;
                 $customerDocuments[$key]['is_blocked'] = $value->is_blocked;
@@ -199,6 +202,8 @@ class CustomerDocumentDataController extends Controller
                     $customerDocuments[$key]['expire_date'] = $value->expiry_date;
                     $customerDocuments[$key]['approved_by'] = $value->approved_by;
                     $customerDocuments[$key]['reject_message'] = $rejectMessage;
+                    $customerDocuments[$key]['custom_rejection_message'] = $value->custom_rejection_message;
+                    $customerDocuments[$key]['rejection_message_id'] = $value->rejection_message_id;
                     $customerDocuments[$key]['vehicle_type'] = $value->vehicle_type;
                     $customerDocuments[$key]['status'] = $value->is_approved;
                     $customerDocuments[$key]['is_blocked'] = $value->is_blocked;
@@ -601,8 +606,10 @@ class CustomerDocumentDataController extends Controller
             ];
             if (isset($request->rejection_type) && $request->rejection_type == 'custom') {
                 $updateFields['custom_rejection_message'] = $request->reject_message;
+                $updateFields['rejection_message_id'] = null;
             } elseif (isset($request->rejection_type) && $request->rejection_type == 'template') {
                 $updateFields['rejection_message_id'] = $request->reject_template_id;
+                $updateFields['custom_rejection_message'] = null;
             }
             $newVal = $updateFields;
             $document->update($updateFields);
@@ -789,6 +796,11 @@ class CustomerDocumentDataController extends Controller
         }
 
         $customerDocument->customer_id = $request->customer_id;
+        $customerDocument->document_type = $request->doc_type;
+        $customerDocument->id_number = $request->doc_number;
+        if ($request->doc_type == 'dl') {
+            $customerDocument->vehicle_type = $request->vehicle_type;
+        }
         if (isset($request->approve_via) && $request->approve_via == 'manually') {
             if ($request->doc_type == 'govtid') {
                 $customerDocument->govtid_type = $request->govt_type ?? NULL;

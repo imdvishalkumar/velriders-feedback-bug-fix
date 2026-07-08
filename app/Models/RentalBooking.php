@@ -41,6 +41,7 @@ class RentalBooking extends Model
         'end_datetime',
         // 'data_json',
         'tax_rate',
+        'commission_percent',
         'sequence_no',
         'is_end_by_admin',
         'initial_vehicle_id',

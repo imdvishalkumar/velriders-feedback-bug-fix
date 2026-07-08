@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\AdminApis;
 
-use App\Http\Controllers\Controller; 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\{Customer, CustomerDocument, RejectionReason};
 use Illuminate\Support\Facades\Validator;
@@ -41,7 +41,8 @@ class CustomerDocumentDataController extends Controller
         // $this->cashfreeElectionApiUrl = config('global_values.cashfree_verification_test_url').'verification/voter-id';
     }
 
-    public function getCustomerDocuments(Request $request){
+    public function getCustomerDocuments(Request $request)
+    {
         $page = $request->input('page');
         $pageSize = $request->input('page_size');
         $orderColumn = $request->order_column ?? '';
@@ -51,7 +52,7 @@ class CustomerDocumentDataController extends Controller
         $orderTypes = implode(',', $orderTypes);
         $validator = Validator::make($request->all(), [
             'customer_id' => 'nullable|exists:customers,customer_id',
-            'order_type' => 'nullable|in:'.$orderTypes,
+            'order_type' => 'nullable|in:' . $orderTypes,
         ]);
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
@@ -74,17 +75,17 @@ class CustomerDocumentDataController extends Controller
         if (!empty($request->customer_id)) {
             $customerDocs = $customerDocs->where('customers.customer_id', $request->customer_id);
         }
-        if(isset($search) && $search != ''){
+        if (isset($search) && $search != '') {
             $customerDocs = $customerDocs->where(function ($query) use ($search) {
                 $query->whereRaw('LOWER(customers.firstname) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(customers.lastname) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(customers.email) LIKE LOWER(?)', ["%$search%"])
-                      ->orWhereRaw('LOWER(customers.mobile_number) LIKE LOWER(?)', ["%$search%"]);
+                    ->orWhereRaw('LOWER(customers.lastname) LIKE LOWER(?)', ["%$search%"])
+                    ->orWhereRaw('LOWER(customers.email) LIKE LOWER(?)', ["%$search%"])
+                    ->orWhereRaw('LOWER(customers.mobile_number) LIKE LOWER(?)', ["%$search%"]);
             });
         }
-        if($orderColumn != '' && $orderType != ''){
+        if ($orderColumn != '' && $orderType != '') {
             $customerDocs = $customerDocs->orderBy($orderColumn, $orderType);
-        }else{
+        } else {
             $customerDocs = $customerDocs->orderBy('created_at', 'DESC');
         }
 
@@ -95,9 +96,9 @@ class CustomerDocumentDataController extends Controller
             foreach ($decodedCustDocs as $key => $value) {
                 if ($value->document_type === 'dl')
                     $value->document_type = 'Driving License';
-                elseif($value->document_type === 'govtid')
+                elseif ($value->document_type === 'govtid')
                     $value->document_type = 'Government ID';
-                
+
                 if ($value->vehicle_type == 'car')
                     $value->vehicle_type = 'Car';
                 elseif ($value->vehicle_type == 'bike')
@@ -109,11 +110,11 @@ class CustomerDocumentDataController extends Controller
 
                 if ($value->is_approved === 'awaiting_approval')
                     $value->is_approved = 'Awaiting Approval';
-                elseif($value->is_approved === 'approved')
+                elseif ($value->is_approved === 'approved')
                     $value->is_approved = 'Approved';
-                elseif($value->is_approved === 'rejected')
+                elseif ($value->is_approved === 'rejected')
                     $value->is_approved = 'Rejected';
-            
+
                 $customerDocuments[$key]['customer_details'] = [
                     'customer_id' => $value->customer ? $value->customer->customer_id : '',
                     'firstname' => $value->customer ? $value->customer->firstname : '',
@@ -124,8 +125,8 @@ class CustomerDocumentDataController extends Controller
                     'profile_picture_url' => $value->customer ? $value->customer->profile_picture_url : '',
                 ];
                 $rejectMessage = $value->custom_rejection_message;
-                if(isset($value->rejection_message_id)){
-                   $rejectMessage = $value->rejection_reason->reason ?? '';
+                if (isset($value->rejection_message_id)) {
+                    $rejectMessage = $value->rejection_reason->reason ?? '';
                 }
 
                 $customerDocuments[$key]['document_id'] = $value->document_id;
@@ -151,16 +152,17 @@ class CustomerDocumentDataController extends Controller
                     'last_page' => $custDocs->lastPage(),
                     'from' => ($custDocs->currentPage() - 1) * $custDocs->perPage() + 1,
                     'to' => min($custDocs->currentPage() * $custDocs->perPage(), $custDocs->total()),
-                ]], 'Customer documents fetched successfully');
-        }else{
+                ]
+            ], 'Customer documents fetched successfully');
+        } else {
             $customerDocs = $customerDocs->get();
-            if(isset($customerDocs) && is_countable($customerDocs) && count($customerDocs) > 0){
+            if (isset($customerDocs) && is_countable($customerDocs) && count($customerDocs) > 0) {
                 foreach ($customerDocs as $key => $value) {
                     if ($value->document_type === 'dl')
                         $value->document_type = 'Driving License';
-                    elseif($value->document_type === 'govtid')
+                    elseif ($value->document_type === 'govtid')
                         $value->document_type = 'Government ID';
-                    
+
                     if ($value->vehicle_type == 'car')
                         $value->vehicle_type = 'Car';
                     elseif ($value->vehicle_type == 'bike')
@@ -172,11 +174,11 @@ class CustomerDocumentDataController extends Controller
 
                     if ($value->is_approved === 'awaiting_approval')
                         $value->is_approved = 'Awaiting Approval';
-                    elseif($value->is_approved === 'approved')
+                    elseif ($value->is_approved === 'approved')
                         $value->is_approved = 'Approved';
-                    elseif($value->is_approved === 'rejected')
+                    elseif ($value->is_approved === 'rejected')
                         $value->is_approved = 'Rejected';
-                
+
                     $customerDocuments[$key]['customer_details'] = [
                         'customer_id' => $value->customer->customer_id,
                         'firstname' => $value->customer->firstname,
@@ -186,7 +188,7 @@ class CustomerDocumentDataController extends Controller
                         'mobile_number' => $value->customer->mobile_number,
                     ];
                     $rejectMessage = $value->custom_rejection_message;
-                    if(isset($value->rejection_message_id)){
+                    if (isset($value->rejection_message_id)) {
                         $rejectMessage = $value->rejection_reason->reason ?? '';
                     }
                     $customerDocuments[$key]['document_id'] = $value->document_id;
@@ -209,23 +211,25 @@ class CustomerDocumentDataController extends Controller
         $custDocs = [
             'customerDocs' => $customerDocuments,
         ];
-        if(isset($custDocs) && is_countable($custDocs) && count($custDocs) > 0){
+        if (isset($custDocs) && is_countable($custDocs) && count($custDocs) > 0) {
             return $this->successResponse($custDocs, 'Customer documents fetched successfully');
-        }else{
+        } else {
             return $this->errorResponse('Customer documents are not found');
         }
     }
 
-    public function getRejectReasons(Request $request){
+    public function getRejectReasons(Request $request)
+    {
         $rejectionReasons = RejectionReason::select('id', 'reason')->get();
-        if(isset($rejectionReasons) && is_countable($rejectionReasons) && count($rejectionReasons) > 0){
+        if (isset($rejectionReasons) && is_countable($rejectionReasons) && count($rejectionReasons) > 0) {
             return $this->successResponse($rejectionReasons, 'Reject Reasons are get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Reject reasons are not Found');
         }
     }
 
-    public function approveRejectBlockDocument(Request $request){
+    public function approveRejectBlockDocument(Request $request)
+    {
         $govtTypes = [];
         $govtType = NULL;
         if (is_countable(config('global_values.govid_types')) && count(config('global_values.govid_types')) > 0) {
@@ -264,7 +268,7 @@ class CustomerDocumentDataController extends Controller
             return $input->doc_type === 'govtid';
         });
         $validator->sometimes('dob', 'required', function ($input) {
-            if ($input->approve_via == 'cashfree' &&  $input->doc_type === 'dl' || ($input->doc_type === 'govtid' && $input->govtid_type == 'passport'))
+            if ($input->approve_via == 'cashfree' && $input->doc_type === 'dl' || ($input->doc_type === 'govtid' && $input->govtid_type == 'passport'))
                 return true;
             else
                 return false;
@@ -272,16 +276,16 @@ class CustomerDocumentDataController extends Controller
 
         $documentId = $request->document_id;
         $document = CustomerDocument::where(['document_id' => $documentId, 'document_type' => $request->doc_type])->first();
-        if($document == ''){
+        if ($document == '') {
             return $this->errorResponse('Document not Found');
         }
         if ($validator->fails()) {
             return $this->validationErrorResponse($validator);
         }
-        if($request->action == 'approve'){ //APPROVE 
+        if ($request->action == 'approve') { //APPROVE 
             $doc = DB::table('customer_documents')->select('id_number', 'is_approved', 'rejection_message_id', 'custom_rejection_message', 'approved_by', 'vehicle_type')->where('document_id', $documentId)->first();
             $oldVal = clone $doc;
-            if(strtolower($request->approve_via == 'manually')){
+            if (strtolower($request->approve_via == 'manually')) {
                 $updateFields = [
                     'is_approved' => 'approved',
                     'rejection_message_id' => null,
@@ -300,13 +304,13 @@ class CustomerDocumentDataController extends Controller
                 logAdminActivities('Customer Document Approval', $oldVal, $newVal);
 
                 return $this->successResponse($document, 'Document Appoved Successfully');
-            }elseif(strtolower($request->approve_via == 'cashfree')){
+            } elseif (strtolower($request->approve_via == 'cashfree')) {
                 $dob = date('Y-m-d', strtotime($request->dob));
                 $glVerificationStatus = $dlVerificationStatus = false;
-                if($request->doc_type == 'dl'){
+                if ($request->doc_type == 'dl') {
                     $responseJson = NULL;
                     $client = new Client();
-                    $dlNumber = str_replace(' ', '',$doc->id_number);
+                    $dlNumber = str_replace(' ', '', $doc->id_number);
                     $uniqueDlId = substr(uniqid(), -10);
                     $uniqueDlId = "velrider_dl" . $uniqueDlId;
                     $verificationId = $uniqueDlId;
@@ -329,32 +333,32 @@ class CustomerDocumentDataController extends Controller
                     $dlResponseData = json_decode($dlContent, true);
                     if ($dlResponseData != '' && isset($dlResponseData['status']) && $dlResponseData['status'] != '' && strtolower($dlResponseData['status']) == 'valid') {
                         $responseJson = json_encode($dlResponseData);
-                    if ($dlResponseData != '') {
-                        $dlResName = $dlResponseData['details_of_driving_licence']['name'] ?? '';
-                        $dlProfileLink = $dlResponseData['details_of_driving_licence']['photo'] ?? '';
-                        $dlDob = $dlResponseData['dob'] ?? '';
-                        $dlAddress = $dlResponseData['details_of_driving_licence']['address'] ?? '';
-                    }
-                    $customer = Customer::where('customer_id', $document->customer_id)->first();
-                    $checkGovtId = CustomerDocument::where('customer_id', $document->customer_id)
-                    ->where('document_type', 'govtid')
-                    ->where('is_approved', 'approved')->first();
-                    if ($checkGovtId == '') {
-                        return $this->errorResponse('Verify your Government ID First');
-                    } else {
-                        $cashfreeRes = $checkGovtId->cashfree_api_response ? json_decode($checkGovtId->cashfree_api_response) : '';
-                        if ($cashfreeRes != '') {
-                            $aadharResName = $cashfreeRes->name ?? '';
+                        if ($dlResponseData != '') {
+                            $dlResName = $dlResponseData['details_of_driving_licence']['name'] ?? '';
+                            $dlProfileLink = $dlResponseData['details_of_driving_licence']['photo'] ?? '';
+                            $dlDob = $dlResponseData['dob'] ?? '';
+                            $dlAddress = $dlResponseData['details_of_driving_licence']['address'] ?? '';
                         }
-                    }
-                    if ($aadharResName != '' && $dlResName != '') {
-                        $result = checkNameMatch($aadharResName, $dlResName);
-                        if ($result == 1) {
-                            $dlVerificationStatus = true;
-                        }else{
-                            return $this->errorResponse("You cannot upload anyone else's dl");
+                        $customer = Customer::where('customer_id', $document->customer_id)->first();
+                        $checkGovtId = CustomerDocument::where('customer_id', $document->customer_id)
+                            ->where('document_type', 'govtid')
+                            ->where('is_approved', 'approved')->first();
+                        if ($checkGovtId == '') {
+                            return $this->errorResponse('Verify your Government ID First');
+                        } else {
+                            $cashfreeRes = $checkGovtId->cashfree_api_response ? json_decode($checkGovtId->cashfree_api_response) : '';
+                            if ($cashfreeRes != '') {
+                                $aadharResName = $cashfreeRes->name ?? '';
+                            }
                         }
-                    }
+                        if ($aadharResName != '' && $dlResName != '') {
+                            $result = checkNameMatch($aadharResName, $dlResName);
+                            if ($result == 1) {
+                                $dlVerificationStatus = true;
+                            } else {
+                                return $this->errorResponse("You cannot upload anyone else's dl");
+                            }
+                        }
                     } elseif ($dlResponseData != '' && isset($dlResponseData['status']) && $dlResponseData['status'] != '' && strtolower($dlResponseData['status']) == 'invalid') {
                         return $this->errorResponse('Driving License is Invalid');
                     } else if ($dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' && strtolower($dlResponseData['code']) == 'driving_license_value_invalid') {
@@ -366,11 +370,11 @@ class CustomerDocumentDataController extends Controller
                     } else if ($dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' && strtolower($dlResponseData['code']) == 'verification_id_missing') {
                         return $this->errorResponse('Verification Id is Missing');
                     } else if (
-                    $dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' &&
-                    (strtolower($dlResponseData['code']) == 'verification_id_length_exceeded') ||
-                    (strtolower($dlResponseData['code']) == 'verification_id_value_invalid') ||
-                    (strtolower($dlResponseData['code']) == 'verification_id_already_exists') ||
-                    (strtolower($dlResponseData['code']) == 'verification_failed')
+                        $dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' &&
+                        (strtolower($dlResponseData['code']) == 'verification_id_length_exceeded') ||
+                        (strtolower($dlResponseData['code']) == 'verification_id_value_invalid') ||
+                        (strtolower($dlResponseData['code']) == 'verification_id_already_exists') ||
+                        (strtolower($dlResponseData['code']) == 'verification_failed')
                     ) {
                         return $this->errorResponse('Verification Id is Invalid');
                     } else if (
@@ -386,7 +390,7 @@ class CustomerDocumentDataController extends Controller
                         return $this->errorResponse('Verification id Invalid');
                     }
                     if ($dlVerificationStatus == true) {
-                        if($dlResName != ''){
+                        if ($dlResName != '') {
                             $dlParts = explode(' ', $dlResName);
                             $dlFirstName = $dlParts[0] ?? '';
                             $dlLastName = end($dlParts);
@@ -396,10 +400,10 @@ class CustomerDocumentDataController extends Controller
                             $customer->billing_address = $dlAddress ?? NULL;
                             $customer->save();
                         }
-                        if($dlProfileLink != ''){
+                        if ($dlProfileLink != '') {
                             $response = Http::get($dlProfileLink);
                             if ($response->successful()) {
-                                $fileName = "DL".time() . '.png';
+                                $fileName = "DL" . time() . '.png';
                                 $filePath = public_path('images/profile_pictures/' . $fileName);
                                 if (!File::exists(public_path('images/profile_pictures/'))) {
                                     File::makeDirectory(public_path('images/profile_pictures/'), 0755, true);
@@ -417,13 +421,13 @@ class CustomerDocumentDataController extends Controller
                         $document->dob = isset($dob) && $dob != '' ? date('Y-m-d', strtotime($dob)) : NULL;
                         $document->save();
                         return $this->successResponse($document, 'Document updated Successfully');
-                    }else{
+                    } else {
                         return $this->errorResponse('Something went Wrong');
                     }
-                }elseif($request->doc_type == 'govtid'){
+                } elseif ($request->doc_type == 'govtid') {
                     $client = new Client();
                     $idNumber = $doc->id_number;
-                    if($request->govtid_type == 'aadhar'){
+                    if ($request->govtid_type == 'aadhar') {
                         $govtType = 'aadhar';
                         if (strlen($idNumber) != 12) {
                             return $this->errorResponse('Aadhar Number should contain 12 digits');
@@ -472,7 +476,7 @@ class CustomerDocumentDataController extends Controller
                             }
                             return $this->errorResponse($errorMessage);
                         }
-                    }elseif($request->govtid_type == 'passport'){
+                    } elseif ($request->govtid_type == 'passport') {
                         $govtType = 'passport';
                         $responseJson = NULL;
                         if (strlen($idNumber) != 15) {
@@ -515,7 +519,7 @@ class CustomerDocumentDataController extends Controller
                         } catch (ClientException $e) {
                             return $this->errorResponse("Something went Wrong..Please try with corrent Government ID number");
                         }
-                    }elseif($request->govtid_type == 'election'){
+                    } elseif ($request->govtid_type == 'election') {
                         $govtType = 'election';
                         //Voter ID/Election Card verification
                         $responseJson = NULL;
@@ -582,22 +586,22 @@ class CustomerDocumentDataController extends Controller
                         $document->save();
 
                         return $this->successResponse($document, "Document verified Successfully");
-                    }else{
+                    } else {
                         return $this->errorResponse("Something went Wrong");
                     }
                 }
             }
-        }elseif($request->action == 'reject') { // REJECT
-            $doc = DB::table('customer_documents')->select('is_approved', 'rejection_message_id', 'custom_rejection_message', 'approved_by')->where('document_id',$documentId)->first();
+        } elseif ($request->action == 'reject') { // REJECT
+            $doc = DB::table('customer_documents')->select('is_approved', 'rejection_message_id', 'custom_rejection_message', 'approved_by')->where('document_id', $documentId)->first();
             $oldVal = clone $doc;
             $updateFields = [
                 'is_approved' => 'rejected',
                 'approved_by' => auth()->guard('admin')->user()->admin_id,
                 'is_approved_datetime' => date('Y-m-d H:i:s'),
             ];
-            if(isset($request->rejection_type) && $request->rejection_type == 'custom'){
+            if (isset($request->rejection_type) && $request->rejection_type == 'custom') {
                 $updateFields['custom_rejection_message'] = $request->reject_message;
-            }elseif(isset($request->rejection_type) && $request->rejection_type == 'template'){
+            } elseif (isset($request->rejection_type) && $request->rejection_type == 'template') {
                 $updateFields['rejection_message_id'] = $request->reject_template_id;
             }
             $newVal = $updateFields;
@@ -607,23 +611,23 @@ class CustomerDocumentDataController extends Controller
             logAdminActivities('Customer Document Rejection', $oldVal, $newVal);
 
             return $this->successResponse($document, 'Document Rejected Successfully');
-        }elseif($request->action == 'block'){ //BLOCK / UN-BLOCK
-            $document->is_blocked =  $request->status;
+        } elseif ($request->action == 'block') { //BLOCK / UN-BLOCK
+            $document->is_blocked = $request->status;
             $document->save();
-            if($request->status == 1){
+            if ($request->status == 1) {
                 logAdminActivities("Customer Document Block Activity", $document);
-                return $this->successResponse($document, 'Document Blocked Successfully'); 
-            }
-            else{
+                return $this->successResponse($document, 'Document Blocked Successfully');
+            } else {
                 logAdminActivities("Customer Document Un-Block Activity", $document);
                 return $this->successResponse($document, 'Document Un-blocked Successfully');
             }
-        }else{
+        } else {
             return $this->errorResponse('Invaid Action');
         }
     }
 
-    public function verifyGovtIdDocument(Request $request){
+    public function verifyGovtIdDocument(Request $request)
+    {
         $validator = Validator::make($request->all(), [
             'id_number' => [
                 'required',
@@ -651,7 +655,7 @@ class CustomerDocumentDataController extends Controller
             ->whereNotNull('expiry_date')
             ->whereBetween('expiry_date', [Carbon::now(), Carbon::now()->addMonth()])
             ->first();
-            
+
         if ($existingDocument) {
             if ($existingDocument->is_approved === 'awaiting_approval') {
                 return $this->errorResponse('There is already a document of this type awaiting approval.');
@@ -691,7 +695,8 @@ class CustomerDocumentDataController extends Controller
                         $document->vehicle_type = $request->vehicle_type;
                         $document->cashfree_api_response = $aadharResponseJson;
                         $document->is_approved = 'approved';
-                        $document->approved_by = auth()->guard('admin')->user()->admin_id;;
+                        $document->approved_by = auth()->guard('admin')->user()->admin_id;
+                        ;
                         $document->is_approved_datetime = date('Y-m-d H:i:s');
                         $document->govtid_type = 'aadhar';
                         $document->save();
@@ -711,7 +716,8 @@ class CustomerDocumentDataController extends Controller
         }
     }
 
-    public function addDocument(Request $request){
+    public function addDocument(Request $request)
+    {
         $govtTypes = [];
         $govtType = NULL;
         if (is_countable(config('global_values.govid_types')) && count(config('global_values.govid_types')) > 0) {
@@ -731,7 +737,7 @@ class CustomerDocumentDataController extends Controller
             'doc_back_img' => 'required|image|mimetypes:image/heic,image/heif,image/jpeg,image/png,image/jpg,image/bmp,image/gif,image/svg,image/webp|max:20480',
             'approve_via' => 'required|in:manually,cashfree',
             'govt_type' => 'nullable',
-        ],[
+        ], [
             'doc_type.required' => 'Please select Document Type',
             'customer_id.required' => 'Please select Customer',
             'doc_number.required' => 'Please enter Document Number',
@@ -755,52 +761,52 @@ class CustomerDocumentDataController extends Controller
         }
         $oldVal = $newVal = '';
         $customerDocument = CustomerDocument::where(['customer_id' => $request->customer_id, 'id_number' => $request->doc_number, 'document_type' => $request->doc_type])->first();
-        if($customerDocument == ''){
-            $customerDocument = new CustomerDocument();            
+        if ($customerDocument == '') {
+            $customerDocument = new CustomerDocument();
         }
         $oldVal = clone $customerDocument;
         $frontImageUrl = $backImageUrl = null;
         if ($request->hasFile('doc_front_img')) {
             $documentImage = $request->file('doc_front_img');
-            if($request->doc_type == 'govtid' && $request->customer_id != ''){
-                $frontImageUrl = 'govt_'.$request->customer_id.'_'.time() . '_front.' . $documentImage->getClientOriginalExtension();
-            }elseif($request->doc_type == 'dl' && $request->customer_id != ''){
-                $frontImageUrl = 'dl'.$request->customer_id.'_'.time() . '_front.' . $documentImage->getClientOriginalExtension();
+            if ($request->doc_type == 'govtid' && $request->customer_id != '') {
+                $frontImageUrl = 'govt_' . $request->customer_id . '_' . time() . '_front.' . $documentImage->getClientOriginalExtension();
+            } elseif ($request->doc_type == 'dl' && $request->customer_id != '') {
+                $frontImageUrl = 'dl' . $request->customer_id . '_' . time() . '_front.' . $documentImage->getClientOriginalExtension();
             }
             $documentImage->move(public_path('images/customer_documents'), $frontImageUrl);
             $customerDocument->document_image_url = $frontImageUrl;
         }
         if ($request->hasFile('doc_back_img')) {
             $documentBackImage = $request->file('doc_back_img');
-            if($request->doc_type == 'govtid' && $request->customer_id != ''){
-                $backImageUrl = 'govt_'.$request->customer_id.'_'.time() . '_back.' . $documentBackImage->getClientOriginalExtension();
-            }elseif($request->doc_type == 'dl' && $request->customer_id != ''){
-                $backImageUrl = 'dl'.$request->customer_id.'_'.time() . '_back.' . $documentBackImage->getClientOriginalExtension();
+            if ($request->doc_type == 'govtid' && $request->customer_id != '') {
+                $backImageUrl = 'govt_' . $request->customer_id . '_' . time() . '_back.' . $documentBackImage->getClientOriginalExtension();
+            } elseif ($request->doc_type == 'dl' && $request->customer_id != '') {
+                $backImageUrl = 'dl' . $request->customer_id . '_' . time() . '_back.' . $documentBackImage->getClientOriginalExtension();
             }
             $documentBackImage->move(public_path('images/customer_documents'), $backImageUrl);
             $customerDocument->document_back_image_url = $backImageUrl;
         }
 
         $customerDocument->customer_id = $request->customer_id;
-        if(isset($request->approve_via) && $request->approve_via == 'manually'){
+        if (isset($request->approve_via) && $request->approve_via == 'manually') {
             $customerDocument->document_type = $request->doc_type;
             $customerDocument->id_number = $request->doc_number;
             $customerDocument->is_approved = 1;
             $customerDocument->is_approved_datetime = date('Y-m-d H:i:s');
             $customerDocument->approved_by = auth()->guard('admin')->user()->admin_id;
-            if($request->doc_type == 'dl' && $request->customer_id != ''){
+            if ($request->doc_type == 'dl' && $request->customer_id != '') {
                 $customerDocument->vehicle_type = $request->vehicle_type;
             }
             $customerDocument->save();
             $newVal = $customerDocument;
             logAdminActivities('Customer Document DRIVING LICENCE uploaded Manually', $oldVal, $newVal);
-        }elseif(isset($request->approve_via) && $request->approve_via == 'cashfree'){
+        } elseif (isset($request->approve_via) && $request->approve_via == 'cashfree') {
             $dob = date('Y-m-d', strtotime($request->dob));
             $glVerificationStatus = $dlVerificationStatus = false;
             $responseJson = NULL;
-            if($request->doc_type == 'dl'){
+            if ($request->doc_type == 'dl') {
                 $client = new Client();
-                $dlNumber = str_replace(' ', '',$request->doc_number);
+                $dlNumber = str_replace(' ', '', $request->doc_number);
                 $uniqueDlId = substr(uniqid(), -10);
                 $uniqueDlId = "velrider_dl" . $uniqueDlId;
                 $verificationId = $uniqueDlId;
@@ -843,10 +849,10 @@ class CustomerDocumentDataController extends Controller
                         $result = checkNameMatch($aadharResName, $dlResName);
                         if ($result == 1) {
                             $dlVerificationStatus = true;
-                        }else{
+                        } else {
                             return $this->errorResponse("You cannot upload anyone else's dl");
                         }
-                    }elseif ($dlResponseData != '' && isset($dlResponseData['status']) && $dlResponseData['status'] != '' && strtolower($dlResponseData['status']) == 'invalid') {
+                    } elseif ($dlResponseData != '' && isset($dlResponseData['status']) && $dlResponseData['status'] != '' && strtolower($dlResponseData['status']) == 'invalid') {
                         return $this->errorResponse('Driving License is Invalid');
                     } else if ($dlResponseData != '' && isset($dlResponseData['type']) && $dlResponseData['type'] != '' && strtolower($dlResponseData['type']) == 'validation_error' && isset($dlResponseData['code']) && $dlResponseData['code'] != '' && strtolower($dlResponseData['code']) == 'driving_license_value_invalid') {
                         return $this->errorResponse('Driving License is Invalid');
@@ -878,7 +884,7 @@ class CustomerDocumentDataController extends Controller
                     }
                 }
                 if ($dlVerificationStatus == true) {
-                    if($dlResName != ''){
+                    if ($dlResName != '') {
                         $dlParts = explode(' ', $dlResName);
                         $dlFirstName = $dlParts[0] ?? '';
                         $dlLastName = end($dlParts);
@@ -888,10 +894,10 @@ class CustomerDocumentDataController extends Controller
                         $customer->billing_address = $dlAddress ?? NULL;
                         $customer->save();
                     }
-                    if($dlProfileLink != ''){
+                    if ($dlProfileLink != '') {
                         $response = Http::get($dlProfileLink);
                         if ($response->successful()) {
-                            $fileName = "DL".time() . '.png';
+                            $fileName = "DL" . time() . '.png';
                             $filePath = public_path('images/profile_pictures/' . $fileName);
                             if (!File::exists(public_path('images/profile_pictures/'))) {
                                 File::makeDirectory(public_path('images/profile_pictures/'), 0755, true);
@@ -912,15 +918,15 @@ class CustomerDocumentDataController extends Controller
                     $newVal = $customerDocument;
                     logAdminActivities('Customer Document DRIVING LICENCE uploaded via Cashfree', $oldVal, $newVal);
                     return $this->successResponse($customerDocument, 'Document updated Successfully');
-                }else{
+                } else {
                     return $this->errorResponse('Something went Wrong');
                 }
-            }elseif($request->doc_type == 'govtid'){
+            } elseif ($request->doc_type == 'govtid') {
                 $refId = '';
                 $aadharStatus = false;
                 $client = new Client();
                 $idNumber = $request->doc_number;
-                if($request->govt_type == 'aadhar'){
+                if ($request->govt_type == 'aadhar') {
                     $govtType = 'aadhar';
                     if (strlen($idNumber) != 12) {
                         return $this->errorResponse('Aadhar Number should contain 12 digits');
@@ -968,7 +974,7 @@ class CustomerDocumentDataController extends Controller
                         }
                         return $this->errorResponse($errorMessage);
                     }
-                }elseif($request->govt_type == 'passport'){
+                } elseif ($request->govt_type == 'passport') {
                     $govtType = 'passport';
                     $responseJson = NULL;
                     if (strlen($idNumber) != 15) {
@@ -1011,7 +1017,7 @@ class CustomerDocumentDataController extends Controller
                     } catch (ClientException $e) {
                         return $this->errorResponse("Something went Wrong..Please try with corrent Government ID number");
                     }
-                }elseif($request->govt_type == 'election'){
+                } elseif ($request->govt_type == 'election') {
                     $govtType = 'election';
                     //Voter ID/Election Card verification
                     $responseJson = NULL;
@@ -1078,23 +1084,24 @@ class CustomerDocumentDataController extends Controller
                     $customerDocument->dob = isset($dob) && $dob != '' ? date('Y-m-d', strtotime($dob)) : NULL;
                     $customerDocument->save();
 
-                    if($aadharStatus == true){
+                    if ($aadharStatus == true) {
                         return $this->successResponse(['ref_id' => $refId, 'govtid' => $idNumber, 'documentId' => $customerDocument->document_id, 'document_upload_message' => "<span style='font-style: italic;'>Document is submitted for approval.</span>"], 'OTP Sent Successfully on your registered Mobile Number');
                     }
                     $newVal = $customerDocument;
                     logAdminActivities('Customer Government ID uploaded via Cashfree', $oldVal, $newVal);
                     return $this->successResponse($customerDocument, "Document verified Successfully");
-                }else{
+                } else {
                     return $this->errorResponse("Something went Wrong");
                 }
             }
         }
         return $this->successResponse($customerDocument, 'Document details are stored successfully!');
     }
-    
-    public function getGovTypes(Request $request){
+
+    public function getGovTypes(Request $request)
+    {
         $govtId = config('global_values.govt_types');
-        if(isset($govtId) && is_countable($govtId) && count($govtId) > 0){
+        if (isset($govtId) && is_countable($govtId) && count($govtId) > 0) {
             $formattedGovtId = [];
             foreach ($govtId as $key => $value) {
                 $formattedGovtId[] = [
@@ -1103,19 +1110,20 @@ class CustomerDocumentDataController extends Controller
                 ];
             }
             return $this->successResponse($formattedGovtId, 'Government Types get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Government Types are not found');
         }
     }
 
-    public function getDropdownCustomers(Request $request){
+    public function getDropdownCustomers(Request $request)
+    {
         $customers = Customer::select('customer_id', 'firstname', 'lastname', 'email', 'mobile_number', 'profile_picture_url')->where(['is_deleted' => 0, 'is_blocked' => 0, 'is_test_user' => 0])->get();
-        if(isset($customers) && is_countable($customers) && count($customers) > 0){
+        if (isset($customers) && is_countable($customers) && count($customers) > 0) {
             $customers->each(function ($customer) {
                 $customer->makeHidden(['documents']);
             });
             return $this->successResponse($customers, 'Customers get successfully');
-        }else{
+        } else {
             return $this->errorResponse('Cutomers are not found');
         }
     }
