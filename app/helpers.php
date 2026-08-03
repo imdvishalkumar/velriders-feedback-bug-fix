@@ -163,7 +163,10 @@ function sendPushNotification($deviceToken, $title = NULL, $content = NULL)
                 ]
             ]
         ];
-        $client = new Client();
+        $client = new Client([
+            'timeout' => 30.0,
+            'connect_timeout' => 10.0,
+        ]);
         $response = $client->post($url, [
             'headers' => [
                 'Content-Type' => 'application/json',
@@ -171,6 +174,9 @@ function sendPushNotification($deviceToken, $title = NULL, $content = NULL)
 
             ],
             'json' => $jsonResponse,
+            // Return 4xx/5xx as a normal response instead of throwing, so the
+            // caller can read the real FCM error (UNREGISTERED, INVALID_ARGUMENT..)
+            'http_errors' => false,
         ]);
         // Handle response
         $statusCode = $response->getStatusCode();
@@ -179,10 +185,27 @@ function sendPushNotification($deviceToken, $title = NULL, $content = NULL)
             'status_code' => $statusCode,
             'response' => json_decode($body, true),
         ];
+        if ($statusCode != 200) {
+            Log::error('FCM send failed - status ' . $statusCode . ' - ' . $body);
+        }
     } else {
-        Log::info("Access Token for Push Notification is not found..");
+        Log::error("Access Token for Push Notification is not found..");
+        $returnArr = [
+            'status_code' => 0,
+            'response' => ['error' => ['status' => 'NO_ACCESS_TOKEN']],
+        ];
     }
     return $returnArr;
+}
+
+/**
+ * Permanent FCM token failures. Anything else (network blip, 5xx, timeout) is
+ * transient and must NOT disable the token.
+ */
+function isFcmTokenPermanentlyInvalid($notificationResponse)
+{
+    $status = $notificationResponse['response']['error']['status'] ?? '';
+    return in_array($status, ['UNREGISTERED', 'INVALID_ARGUMENT', 'SENDER_ID_MISMATCH'], true);
 }
 
 function sendTopicPushNotification($subject, $content)
@@ -200,13 +223,17 @@ function sendTopicPushNotification($subject, $content)
                 ],
             ]
         ];
-        $client = new Client();
+        $client = new Client([
+            'timeout' => 30.0,
+            'connect_timeout' => 10.0,
+        ]);
         $response = $client->post($url, [
             'headers' => [
                 'Content-Type' => 'application/json',
                 'Authorization' => 'Bearer ' . $accessToken,
             ],
             'json' => $jsonResponse,
+            'http_errors' => false,
         ]);
         $statusCode = $response->getStatusCode();
         $body = $response->getBody()->getContents();
@@ -214,8 +241,15 @@ function sendTopicPushNotification($subject, $content)
             'status_code' => $statusCode,
             'response' => json_decode($body, true),
         ];
+        if ($statusCode != 200) {
+            Log::error('FCM topic send failed - status ' . $statusCode . ' - ' . $body);
+        }
     } else {
-        Log::info("Access Token for Push Notification is not found..");
+        Log::error("Access Token for Push Notification is not found..");
+        $returnArr = [
+            'status_code' => 0,
+            'response' => ['error' => ['status' => 'NO_ACCESS_TOKEN']],
+        ];
     }
     return $returnArr;
 }
@@ -224,16 +258,28 @@ function getDynamicAccessToken()
 {
     $accessToken = '';
     $jsonFile = config_path('velriders-8db39-5a56d176b2d7.json'); //Got from the service account
-    //$client = new GoogleClient();
-    $client = new \Google\Client();
-    $client->setAuthConfig($jsonFile);
-    $client->setScopes([
-        'https://www.googleapis.com/auth/firebase.messaging',
-    ]);
-    $accessTokenResponse = $client->fetchAccessTokenWithAssertion();
 
-    if ($accessTokenResponse && $accessTokenResponse['access_token']) {
-        $accessToken = $accessTokenResponse['access_token'] ?? '';
+    if (!file_exists($jsonFile) || !is_readable($jsonFile)) {
+        Log::error('FCM service account file missing or unreadable at - ' . $jsonFile);
+        return '';
+    }
+
+    try {
+        //$client = new GoogleClient();
+        $client = new \Google\Client();
+        $client->setAuthConfig($jsonFile);
+        $client->setScopes([
+            'https://www.googleapis.com/auth/firebase.messaging',
+        ]);
+        $accessTokenResponse = $client->fetchAccessTokenWithAssertion();
+
+        if (isset($accessTokenResponse['access_token']) && $accessTokenResponse['access_token'] != '') {
+            $accessToken = $accessTokenResponse['access_token'];
+        } else {
+            Log::error('FCM access token not returned - ' . json_encode($accessTokenResponse));
+        }
+    } catch (\Throwable $e) {
+        Log::error('FCM access token fetch failed - ' . $e->getMessage());
     }
 
     return $accessToken;
@@ -1017,7 +1063,13 @@ function checkedBookedVehicele($vehicleId, $startDate, $endDate, $bookingGap, $b
 {
     $checkedBookedVehicleMsg = '';
     $existingBookings = RentalBooking::where('vehicle_id', $vehicleId)
-        ->whereIn('status', ['running', 'confirmed']);
+        ->where(function ($query) {
+            $query->whereIn('status', ['running', 'confirmed'])
+                ->orWhere(function ($q) {
+                    $q->where('status', 'pending')
+                        ->where('created_at', '>=', \Carbon\Carbon::now()->subMinutes(15));
+                });
+        });
 
     if ($bookingId != NULL) {
         $existingBookings = $existingBookings->where('booking_id', '!=', $bookingId);

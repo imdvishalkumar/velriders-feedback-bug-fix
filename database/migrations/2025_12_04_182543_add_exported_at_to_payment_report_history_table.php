@@ -12,8 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('payment_report_history', function (Blueprint $table) {
-            $table->timestamp('exported_at')->nullable()->after('is_completed')->comment('Timestamp when export was completed');
-            $table->json('export_filters')->nullable()->after('exported_at')->comment('JSON containing export filters: start_date, end_date, etc.');
+            if (!Schema::hasColumn('payment_report_history', 'exported_at')) {
+                $table->timestamp('exported_at')->nullable()->after('is_completed')->comment('Timestamp when export was completed');
+            }
+            if (!Schema::hasColumn('payment_report_history', 'export_filters')) {
+                $table->json('export_filters')->nullable()->after('exported_at')->comment('JSON containing export filters: start_date, end_date, etc.');
+            }
         });
     }
 

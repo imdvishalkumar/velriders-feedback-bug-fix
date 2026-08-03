@@ -426,22 +426,31 @@ class CarHostVehicleController extends Controller
             if (!$checkLocation) {
                 $checkLocation = CarHostPickupLocation::where('car_hosts_id', $user->id)->where('is_deleted', 0)->first();
             }
-            $setting = Setting::select('location_km_distance_val')->first();
-            $locationKmDistanceVal = $setting->location_km_distance_val;
-            $existingLat = $checkLocation->latitude;
-            $existingLong = $checkLocation->longitude;
-            $reqLat = $request->latitude;
-            $reqLong = $request->longitude;
-            $radius = $locationKmDistanceVal;
-            $distance = 6371 * acos(
-                cos(deg2rad($reqLat)) *
-                cos(deg2rad($existingLat)) *
-                cos(deg2rad($existingLong - $reqLong)) +
-                sin(deg2rad($reqLat)) *
-                sin(deg2rad($existingLat))
-            );
-            if ($distance > $locationKmDistanceVal) {
-                return $this->errorResponse('Location is Invalid');
+            if ($checkLocation) {
+                $setting = Setting::select('location_km_distance_val')->first();
+                $locationKmDistanceVal = $setting->location_km_distance_val ?? 10;
+                $existingLat = $checkLocation->latitude;
+                $existingLong = $checkLocation->longitude;
+                $reqLat = $request->latitude;
+                $reqLong = $request->longitude;
+                $radius = $locationKmDistanceVal;
+
+                $cosVal = cos(deg2rad($reqLat)) *
+                    cos(deg2rad($existingLat)) *
+                    cos(deg2rad($existingLong - $reqLong)) +
+                    sin(deg2rad($reqLat)) *
+                    sin(deg2rad($existingLat));
+
+                if ($cosVal > 1) {
+                    $cosVal = 1;
+                } elseif ($cosVal < -1) {
+                    $cosVal = -1;
+                }
+
+                $distance = 6371 * acos($cosVal);
+                if ($distance > $locationKmDistanceVal) {
+                    return $this->errorResponse('Location is Invalid');
+                }
             }
         }
 

@@ -11,20 +11,22 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('payment_report_history', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('booking_id');
-            $table->string('session_id', 255)->index();
-            $table->json('export_data')->comment('JSON containing: amount, account_no, ifsc_code');
-            $table->boolean('is_completed')->default(false)->comment('True when is_completed=true in API call');
-            $table->timestamps();
-            
-            // Foreign key constraint
-            $table->foreign('booking_id')->references('booking_id')->on('rental_bookings')->onDelete('cascade');
-            
-            // Index for faster queries by session_id
-            $table->index(['session_id', 'is_completed']);
-        });
+        if (!Schema::hasTable('payment_report_history')) {
+            Schema::create('payment_report_history', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('booking_id');
+                $table->string('session_id', 255)->index();
+                $table->json('export_data')->comment('JSON containing: amount, account_no, ifsc_code');
+                $table->boolean('is_completed')->default(false)->comment('True when is_completed=true in API call');
+                $table->timestamps();
+                
+                // Foreign key constraint
+                $table->foreign('booking_id')->references('booking_id')->on('rental_bookings')->onDelete('cascade');
+                
+                // Index for faster queries by session_id
+                $table->index(['session_id', 'is_completed']);
+            });
+        }
     }
 
     /**

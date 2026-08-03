@@ -80,34 +80,43 @@ class SendAdminEmailNotification implements ShouldQueue
                             $customerDeviceToken = CustomerDeviceToken::where('customer_id', $customer->customer_id)->where('device_token', '!=', '')->where('is_deleted', 0)->where('is_error', 0)->get();
                             if(isset($customerDeviceToken) && is_countable($customerDeviceToken) && count($customerDeviceToken) > 0){
                                 if($this->showAllStatus != 1){
+                                    $customerSent = false;
                                     foreach($customerDeviceToken as $key => $value){
                                         try{
                                             $notificationResponse = sendPushNotification($value->device_token, $this->subject, $this->content);
                                             if(isset($notificationResponse['status_code']) && $notificationResponse['status_code'] == 200){
                                                 $sentStatus = true;
+                                                $customerSent = true;
                                             }else{
-                                                Log::error('Something went wrong.. Notification not sent to this number - '. $customer->mobile_number.'and its response - '.json_encode($notificationResponse));
-                                            } 
-                                        } catch (\Exception $e) {
-                                            $deviceToken = CustomerDeviceToken::where('customer_id', $customer->customer_id)->where('device_token', $value->device_token)->first();
-                                            if($deviceToken != ''){
-                                                $deviceToken->is_error = 1;
-                                                $deviceToken->error_log = json_encode($e->getMessage());
-                                                $deviceToken->save();
+                                                Log::error('Something went wrong.. Notification not sent to this number - '. $customer->mobile_number.' and its response - '.json_encode($notificationResponse));
+                                                // Only disable the token when FCM says it is permanently invalid.
+                                                // Transient failures (5xx, timeout) must keep the token usable.
+                                                if(isFcmTokenPermanentlyInvalid($notificationResponse)){
+                                                    $value->is_error = 1;
+                                                    $value->error_log = json_encode($notificationResponse['response']['error'] ?? $notificationResponse);
+                                                    $value->save();
+                                                }
                                             }
+                                        } catch (\Throwable $e) {
+                                            // Network/transport level failure - log it, but do NOT blacklist the token.
+                                            Log::error('Push notification exception for number - '. $customer->mobile_number.' - '.$e->getMessage());
                                             continue;
-                                        }  
+                                        }
                                     }
                                     $notificationLog = new NotificationLog();
                                     $notificationLog->customer_id = $customer->customer_id;
                                     $notificationLog->type = 2; // 2 Means Push notification
-                                    $notificationLog->status = 1;
+                                    $notificationLog->status = $customerSent ? 1 : 0;
                                     $notificationLog->event_type = $this->subject;
                                     $notificationLog->message_text = $this->content;
                                     $notificationLog->is_show = $this->showStatus;
                                     $notificationLog->save();
                                 }
+                            }else{
+                                Log::warning('No usable device token for number - '.$customer->mobile_number.' (customer_id '.$customer->customer_id.')');
                             }
+                        }else{
+                            Log::warning('Customer not found for push notification - mobile number '.$val);
                         }
                         // OLD CODE
                         // if($customer != '' && (isset($customer->device_token) || $customer->device_token != NULL || $customer->device_token != '')){
@@ -131,18 +140,21 @@ class SendAdminEmailNotification implements ShouldQueue
                 }
             }
         }else if($this->customers == 0 && $this->notificationType == 'push_notification' && $this->showAllStatus == 1){ // Notifications to all users
+            $sentStatus = false;
             try{
                 $notificationResponse = sendTopicPushNotification($this->subject, $this->content);
                 if(isset($notificationResponse['status_code']) && $notificationResponse['status_code'] == 200){
                     $sentStatus = true;
                 }else{
                     Log::error('Something went wrong.. Notification not sent and its response - '.json_encode($notificationResponse));
-                } 
-            } catch (\Exception $e) {}  
+                }
+            } catch (\Throwable $e) {
+                Log::error('Topic push notification exception - '.$e->getMessage());
+            }
             $notificationLog = new NotificationLog();
             $notificationLog->customer_id = NULL;
             $notificationLog->type = 2; //1 means Email & 2 means Push Notification
-            $notificationLog->status = 1;
+            $notificationLog->status = $sentStatus ? 1 : 0;
             $notificationLog->event_type = $this->subject;
             $notificationLog->message_text = $this->content;
             $notificationLog->is_show = 1;

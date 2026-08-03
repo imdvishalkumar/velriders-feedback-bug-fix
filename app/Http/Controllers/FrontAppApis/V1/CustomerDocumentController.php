@@ -133,7 +133,10 @@ class CustomerDocumentController extends Controller
                 return $this->errorResponse($message);
             }
             $responseJson = NULL;
-            $client = new Client();
+            $client = new Client([
+                'timeout' => 60.0,
+                'connect_timeout' => 10.0,
+            ]);
             $dlNumber = str_replace(' ', '', $request->id_number);
             $dob = $request->dob;
             $uniqueDlId = substr(uniqid(), -10);
@@ -237,7 +240,10 @@ class CustomerDocumentController extends Controller
             }
             $idNumber = isset($request->id_number) ? $request->id_number : '';
             if ($idNumber != '') {
-                $client = new Client();
+                $client = new Client([
+                    'timeout' => 60.0,
+                    'connect_timeout' => 10.0,
+                ]);
                 if (isset($request->govtid_type) && $request->govtid_type == 'aadhar') { //Aadhar Verification - OTP Generation (First Step)    
                     $govtType = 'aadhar';
                     if (strlen($idNumber) != 12) {
@@ -463,7 +469,7 @@ class CustomerDocumentController extends Controller
                     $customer->save();
                 }
                 if ($dlProfileLink != '') {
-                    $response = Http::get($dlProfileLink);
+                    $response = Http::timeout(60)->connectTimeout(10)->get($dlProfileLink);
                     if ($response->successful()) {
                         $fileName = "DL" . time() . '.png';
                         $filePath = public_path('images/profile_pictures/' . $fileName);
@@ -481,7 +487,7 @@ class CustomerDocumentController extends Controller
                 $document->is_approved_datetime = date('Y-m-d H:i:s');
                 $document->save();
             }
-            if ($glVerificationStatus = true && $request->document_type == 'govtid') {
+            if ($glVerificationStatus === true && $request->document_type == 'govtid') {
                 if (isset($request->govtid_type) && $request->govtid_type == 'aadhar') {
                     $document->is_approved = 'awaiting_approval';
                 } else {
@@ -627,7 +633,10 @@ class CustomerDocumentController extends Controller
             $aadharNumber = isset($request->id_number) ? $request->id_number : '';
             if ($aadharNumber != '') {
                 try {
-                    $client = new Client();
+                    $client = new Client([
+                        'timeout' => 60.0,
+                        'connect_timeout' => 10.0,
+                    ]);
                     $aadharResponse = $client->request('POST', $this->cashfreeAadharVerifyApiUrl, [
                         'body' => json_encode([
                             'otp' => $request->otp ?? '',

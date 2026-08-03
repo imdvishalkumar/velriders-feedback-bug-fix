@@ -314,7 +314,10 @@ class CustomerDocumentDataController extends Controller
                 $glVerificationStatus = $dlVerificationStatus = false;
                 if ($request->doc_type == 'dl') {
                     $responseJson = NULL;
-                    $client = new Client();
+                    $client = new Client([
+                        'timeout' => 60.0,
+                        'connect_timeout' => 10.0,
+                    ]);
                     $dlNumber = str_replace(' ', '', $doc->id_number);
                     $uniqueDlId = substr(uniqid(), -10);
                     $uniqueDlId = "velrider_dl" . $uniqueDlId;
@@ -406,7 +409,7 @@ class CustomerDocumentDataController extends Controller
                             $customer->save();
                         }
                         if ($dlProfileLink != '') {
-                            $response = Http::get($dlProfileLink);
+                            $response = Http::timeout(60)->connectTimeout(10)->get($dlProfileLink);
                             if ($response->successful()) {
                                 $fileName = "DL" . time() . '.png';
                                 $filePath = public_path('images/profile_pictures/' . $fileName);
@@ -430,7 +433,10 @@ class CustomerDocumentDataController extends Controller
                         return $this->errorResponse('Something went Wrong');
                     }
                 } elseif ($request->doc_type == 'govtid') {
-                    $client = new Client();
+                    $client = new Client([
+                        'timeout' => 60.0,
+                        'connect_timeout' => 10.0,
+                    ]);
                     $idNumber = $doc->id_number;
                     if ($request->govtid_type == 'aadhar') {
                         $govtType = 'aadhar';
@@ -577,7 +583,7 @@ class CustomerDocumentDataController extends Controller
                         }
                     }
 
-                    if ($glVerificationStatus = true && $request->doc_type == 'govtid') {
+                    if ($glVerificationStatus === true && $request->doc_type == 'govtid') {
                         if (isset($request->govtid_type) && $request->govtid_type == 'aadhar') {
                             $document->is_approved = 'awaiting_approval';
                         } else {
@@ -678,7 +684,10 @@ class CustomerDocumentDataController extends Controller
             $aadharNumber = isset($request->id_number) ? $request->id_number : '';
             if ($aadharNumber != '') {
                 try {
-                    $client = new Client();
+                    $client = new Client([
+                        'timeout' => 60.0,
+                        'connect_timeout' => 10.0,
+                    ]);
                     $aadharResponse = $client->request('POST', $this->cashfreeAadharVerifyApiUrl, [
                         'body' => json_encode([
                             'otp' => $request->otp ?? '',
@@ -821,7 +830,10 @@ class CustomerDocumentDataController extends Controller
             $glVerificationStatus = $dlVerificationStatus = false;
             $responseJson = NULL;
             if ($request->doc_type == 'dl') {
-                $client = new Client();
+                $client = new Client([
+                    'timeout' => 60.0,
+                    'connect_timeout' => 10.0,
+                ]);
                 $dlNumber = str_replace(' ', '', $request->doc_number);
                 $uniqueDlId = substr(uniqid(), -10);
                 $uniqueDlId = "velrider_dl" . $uniqueDlId;
@@ -915,7 +927,7 @@ class CustomerDocumentDataController extends Controller
                         $customer->save();
                     }
                     if ($dlProfileLink != '') {
-                        $response = Http::get($dlProfileLink);
+                        $response = Http::timeout(60)->connectTimeout(10)->get($dlProfileLink);
                         if ($response->successful()) {
                             $fileName = "DL" . time() . '.png';
                             $filePath = public_path('images/profile_pictures/' . $fileName);
@@ -944,7 +956,10 @@ class CustomerDocumentDataController extends Controller
             } elseif ($request->doc_type == 'govtid') {
                 $refId = '';
                 $aadharStatus = false;
-                $client = new Client();
+                $client = new Client([
+                    'timeout' => 60.0,
+                    'connect_timeout' => 10.0,
+                ]);
                 $idNumber = $request->doc_number;
                 if ($request->govt_type == 'aadhar') {
                     $govtType = 'aadhar';
@@ -970,6 +985,7 @@ class CustomerDocumentDataController extends Controller
                         if (isset($content->status) && strtolower($content->status) == 'success') {
                             $refId = isset($content->ref_id) ? $content->ref_id : '';
                             $aadharStatus = true;
+                            $glVerificationStatus = true;
                             //return $this->successResponse(['ref_id' => $refId, 'govtid' => $idNumber, 'documentId' => $customerDocument->document_id, 'document_upload_message' => "<span style='font-style: italic;'>Document is submitted for approval.</span>"], 'OTP Sent Successfully on your registered Mobile Number');
                         } else if ($content != '' && isset($content->status) && $content->status != '' && strtolower($content->status) == 'invalid') {
                             return $this->errorResponse('Invalid Aadhaar Card');
@@ -1090,7 +1106,7 @@ class CustomerDocumentDataController extends Controller
                     }
                 }
 
-                if ($glVerificationStatus = true && $request->doc_type == 'govtid') {
+                if ($glVerificationStatus === true && $request->doc_type == 'govtid') {
                     if (isset($request->govt_type) && $request->govt_type == 'aadhar') {
                         $customerDocument->is_approved = 'awaiting_approval';
                     } else {

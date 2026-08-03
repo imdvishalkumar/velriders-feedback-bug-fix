@@ -63,8 +63,11 @@ class NotificationController extends Controller
             try{
                 $adminId = auth()->guard('admin_web')->user()->admin_id ? auth()->guard('admin_web')->user()->admin_id : '';
                 SendAdminEmailNotification::dispatch($to, $title, $content,'push_notification', $adminId, $showStatus, $showAllStatus)->onQueue('emails');
-            } catch (\Exception $e) {}
-            return redirect()->back()->with('success', 'Notification has been sent successfully!');
+            } catch (\Throwable $e) {
+                \Log::error('Failed to queue push notification job - ' . $e->getMessage());
+                return redirect()->back()->with('error', 'Notification could not be queued. Please try again or contact support.');
+            }
+            return redirect()->back()->with('success', 'Notification has been queued and will be delivered shortly.');
         }else{
             return redirect()->back()->with('error', 'You can not send notification on staging Environment');
         }

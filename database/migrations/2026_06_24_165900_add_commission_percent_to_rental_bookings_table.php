@@ -11,14 +11,16 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::table('rental_bookings', function (Blueprint $table) {
-            $table->tinyInteger('commission_percent')->nullable()->after('tax_rate');
-        });
+        if (!Schema::hasColumn('rental_bookings', 'commission_percent')) {
+            Schema::table('rental_bookings', function (Blueprint $table) {
+                $table->tinyInteger('commission_percent')->nullable()->after('tax_rate');
+            });
 
-        // Populate existing bookings with their vehicle's current commission_percent
-        DB::table('rental_bookings')
-            ->join('vehicles', 'rental_bookings.vehicle_id', '=', 'vehicles.vehicle_id')
-            ->update(['rental_bookings.commission_percent' => DB::raw('vehicles.commission_percent')]);
+            // Populate existing bookings with their vehicle's current commission_percent
+            DB::table('rental_bookings')
+                ->join('vehicles', 'rental_bookings.vehicle_id', '=', 'vehicles.vehicle_id')
+                ->update(['rental_bookings.commission_percent' => DB::raw('vehicles.commission_percent')]);
+        }
     }
 
     /**

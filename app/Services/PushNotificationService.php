@@ -5,11 +5,12 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use Illuminate\Support\Facades\Log;
 
-class PushNotificationService {
-    
+class PushNotificationService
+{
+
 
     public function store($sendNotificationCustomer)
-    {   
+    {
         $url = 'https://fcm.googleapis.com/fcm/send';
         $jsonResponse = [
             "to" => $sendNotificationCustomer->device_token,
@@ -27,7 +28,10 @@ class PushNotificationService {
             ]
         ];
 
-        $client = new Client();
+        $client = new Client([
+            'timeout' => 60.0,
+            'connect_timeout' => 10.0,
+        ]);
         $response = $client->post($url, [
             'headers' => [
                 'Content-Type' => 'application/json',

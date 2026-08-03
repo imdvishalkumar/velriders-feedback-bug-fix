@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('customers', function (Blueprint $table) {
-            $table->text('block_reason')->nullable()->after('is_blocked');
+            if (!Schema::hasColumn('customers', 'block_reason')) {
+                $table->text('block_reason')->nullable()->after('is_blocked');
+            }
         });
     }
 

@@ -1777,9 +1777,13 @@ class AdminApiController extends Controller
             try {
                 $adminId = auth()->guard('admin')->user()->admin_id ? auth()->guard('admin')->user()->admin_id : '';
                 SendAdminEmailNotification::dispatch($mobileNos, $title, $content, 'push_notification', $adminId, $showStatus, $showAllStatus)->onQueue('emails');
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
+                \Log::error('Failed to queue push notification job - ' . $e->getMessage());
+                return $this->errorResponse('Notification could not be queued. Please try again or contact support.');
             }
-            return $this->successResponse(null, 'Notification has been sent successfully!');
+            // NOTE: the job is queued, not delivered yet. A queue worker must be
+            // running (queue:work --queue=emails) for it to actually be sent.
+            return $this->successResponse(null, 'Notification has been queued and will be delivered shortly.');
         } else {
             return $this->successResponse(null, 'You can not send notification on staging Environment');
         }
