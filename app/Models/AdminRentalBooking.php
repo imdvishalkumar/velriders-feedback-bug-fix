@@ -28,7 +28,7 @@ class AdminRentalBooking extends Model
         'total_cost',
         'status',
         'rental_type',
-        'city_name',
+      	'city_name',
         'penalty_details',
         //'calculation_details',
         'start_otp',
@@ -51,8 +51,8 @@ class AdminRentalBooking extends Model
     ];
 
     protected $appends = ['city_name', 'start_images', 'end_images', 'price_summary', 'admin_button_visibility', 'host_payment_date'];
-
-    protected static function boot()
+	
+  	protected static function boot()
     {
         parent::boot();
 
@@ -66,13 +66,13 @@ class AdminRentalBooking extends Model
             }
         });
     }
-
+  
     public function getCityNameAttribute()
-    {
-        if (!empty($this->attributes['city_name'])) {
+    {	
+      	if (!empty($this->attributes['city_name'])) {
             return $this->attributes['city_name'];
         }
-
+      
         $cityName = '';
         if ($this->location_from == 1) { // Branch
             $branch = Branch::where('branch_id', $this->location_id)->first();
@@ -93,8 +93,8 @@ class AdminRentalBooking extends Model
 
         return $cityName;
     }
-
-    public function toArray()
+  
+  	public function toArray()
     {
         $array = parent::toArray();
         if (isset($array['vehicle']) && is_array($array['vehicle'])) {

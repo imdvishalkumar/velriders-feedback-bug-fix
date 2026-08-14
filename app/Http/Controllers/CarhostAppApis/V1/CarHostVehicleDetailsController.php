@@ -280,6 +280,20 @@ class CarHostVehicleDetailsController extends Controller
         $bookingWindowEnd = $currentDateTime->copy()->addDay();
         $user = Auth::guard('api-carhost')->user();
         $carEligibilityIds = CarEligibility::where('car_hosts_id', $user->id)->pluck('vehicle_id')->toArray();
+        // $query = RentalBooking::with([
+        //     'pickupLocation' => function ($query) {
+        //         $query->select('id', 'vehicle_id', 'car_hosts_id');
+        //     },
+        //     'pickupLocation.vehiclePickupLocation' => function ($query) {
+        //         $query->select('id', 'name', 'latitude', 'longitude', 'location');
+        //     },
+        //     'vehicle' => function ($query) {
+        //         $query->select('vehicle_id', 'model_id');
+        //     }
+        // ])->whereIn('vehicle_id', $carEligibilityIds)
+        //     ->where('status', 'confirmed')
+        //     ->where('pickup_date', '<=', $bookingWindowEnd)
+        //     ->orderBy('created_at', 'desc');
         $query = RentalBooking::with([
             'pickupLocation' => function ($query) {
                 $query->select('id', 'vehicle_id', 'car_hosts_id');
@@ -290,10 +304,18 @@ class CarHostVehicleDetailsController extends Controller
             'vehicle' => function ($query) {
                 $query->select('vehicle_id', 'model_id');
             }
-        ])->whereIn('vehicle_id', $carEligibilityIds)
-            ->where('status', 'confirmed')
-            ->where('pickup_date', '<=', $bookingWindowEnd)
-            ->orderBy('created_at', 'desc');
+        ])
+        ->whereIn('vehicle_id', $carEligibilityIds)
+        ->where('status', '!=', 'pending')
+        ->where(function ($q) use ($currentDateTime, $bookingWindowEnd) {
+            $q->where(function ($inner) use ($currentDateTime, $bookingWindowEnd) {
+                $inner->where('status', 'confirmed')
+                    ->whereBetween('pickup_date', [$currentDateTime, $bookingWindowEnd]);
+            })
+            ->orWhere('status', '!=', 'confirmed');
+        })
+        ->orderBy('created_at', 'desc');
+
 
         //Vehicle Filter
         if (isset($request->vehicle_id) && $request->vehicle_id != '') {
@@ -797,7 +819,7 @@ class CarHostVehicleDetailsController extends Controller
                 $vehicleTypeName = $vehicle->model->category->vehicleType->name ?? null;
                 $durationHoursLimit = calculateKmLimit($v->hours, $vehicleTypeName);
                 $pricingShowCase[$k]['duration'] = $duration;
-                $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2) . " ( " . $durationHoursLimit . " Km )";
+                $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." Km )";
                 // $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format($tripAmount, 2);
                 $pricingShowCase[$k]['duration_hours_limit'] = "( " . $durationHoursLimit . " Km )";
                 $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);

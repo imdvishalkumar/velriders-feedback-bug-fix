@@ -5,28 +5,23 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ClientException;
 use Illuminate\Support\Facades\Log;
 
-class SmsService
-{
-
+class SmsService {
+    
     protected $apiKey;
 
-    public function __construct($apiKey)
-    {
+    public function __construct($apiKey) {
         $this->apiKey = $apiKey;
     }
 
-    public function sendOTP($mobileNumber, $otp)
-    {
-        $client = new Client([
-            'timeout' => 60.0,
-            'connect_timeout' => 10.0,
-        ]);
+    public function sendOTP($mobileNumber,$otp)
+    {   
+        $client = new Client();
 
         $url = 'https://www.fast2sms.com/dev/bulkV2';
         $headers = [
             'Authorization' => $this->apiKey,
             'Content-Type' => 'application/json',
-        ];
+        ]; 
         $data = [
             'route' => 'dlt',
             'sender_id' => 'VELRDR',
@@ -35,7 +30,7 @@ class SmsService
             'flash' => '0',
             'numbers' => $mobileNumber,
         ];
-
+                
         try {
             $response = $client->request('POST', $url, [
                 'headers' => $headers,
@@ -49,7 +44,7 @@ class SmsService
             $responseBodyAsString = $response->getBody()->getContents();
             $responseBody = json_decode($responseBodyAsString, true);
 
-            if (isset($responseBody) && isset($responseBody['message'])) {
+            if(isset($responseBody) && isset($responseBody['message'])){
                 $details['status'] = $statusCode;
                 $details['message'] = $responseBody['message'];
                 return $details;
@@ -57,9 +52,9 @@ class SmsService
 
             // Log the error
             Log::error("Fast2SMS API Error - Status Code: $statusCode, Response: $responseBodyAsString");
-
+    
             // Return a response indicating the error
-            // return "Fast2SMS API Error - Status Code: $statusCode, Response: $responseBodyAsString";
+           // return "Fast2SMS API Error - Status Code: $statusCode, Response: $responseBodyAsString";
         } catch (\Exception $e) {
             // Handle other exceptions
             Log::error("An unexpected error occurred: " . $e->getMessage());

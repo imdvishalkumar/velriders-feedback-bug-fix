@@ -133,9 +133,10 @@ class CustomerDocumentController extends Controller
                 return $this->errorResponse($message);
             }
             $responseJson = NULL;
+            // $client = new Client();
             $client = new Client([
                 'timeout' => 60.0,
-                'connect_timeout' => 10.0,
+                'connect_timeout' => 15.0,
             ]);
             $dlNumber = str_replace(' ', '', $request->id_number);
             $dob = $request->dob;
@@ -240,9 +241,10 @@ class CustomerDocumentController extends Controller
             }
             $idNumber = isset($request->id_number) ? $request->id_number : '';
             if ($idNumber != '') {
-                $client = new Client([
+                // $client = new Client();
+              	$client = new Client([
                     'timeout' => 60.0,
-                    'connect_timeout' => 10.0,
+                    'connect_timeout' => 15.0,
                 ]);
                 if (isset($request->govtid_type) && $request->govtid_type == 'aadhar') { //Aadhar Verification - OTP Generation (First Step)    
                     $govtType = 'aadhar';
@@ -265,15 +267,6 @@ class CustomerDocumentController extends Controller
                         $statusCode = $aadharResponse->getStatusCode();
                         $content = $aadharResponse->getBody()->getContents();
                         $content = json_decode($content);
-
-                        Log::info('Aadhaar API Raw Response', [
-                            'status_code' => $statusCode,
-                            'raw_response' => $content,
-                        ]);
-
-                        Log::info('Aadhaar API Decoded Response', [
-                            'decoded_response' => $content,
-                        ]);
                         $refId = '';
                         if ($content != '' && isset($content->status) && $content->status != '' && strtolower($content->status) == 'success') {
                             $refId = isset($content->ref_id) ? $content->ref_id : '';
@@ -469,7 +462,8 @@ class CustomerDocumentController extends Controller
                     $customer->save();
                 }
                 if ($dlProfileLink != '') {
-                    $response = Http::timeout(60)->connectTimeout(10)->get($dlProfileLink);
+                    // $response = Http::get($dlProfileLink);
+                    $response = Http::timeout(60)->connectTimeout(15)->get($dlProfileLink);
                     if ($response->successful()) {
                         $fileName = "DL" . time() . '.png';
                         $filePath = public_path('images/profile_pictures/' . $fileName);
@@ -487,6 +481,7 @@ class CustomerDocumentController extends Controller
                 $document->is_approved_datetime = date('Y-m-d H:i:s');
                 $document->save();
             }
+            // if ($glVerificationStatus = true && $request->document_type == 'govtid') {
             if ($glVerificationStatus === true && $request->document_type == 'govtid') {
                 if (isset($request->govtid_type) && $request->govtid_type == 'aadhar') {
                     $document->is_approved = 'awaiting_approval';
@@ -633,9 +628,10 @@ class CustomerDocumentController extends Controller
             $aadharNumber = isset($request->id_number) ? $request->id_number : '';
             if ($aadharNumber != '') {
                 try {
+                    // $client = new Client();
                     $client = new Client([
                         'timeout' => 60.0,
-                        'connect_timeout' => 10.0,
+                        'connect_timeout' => 15.0,
                     ]);
                     $aadharResponse = $client->request('POST', $this->cashfreeAadharVerifyApiUrl, [
                         'body' => json_encode([

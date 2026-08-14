@@ -196,106 +196,84 @@ class RentalBookingController extends Controller
             return $this->validationErrorResponse($validator);
         }
 
-        // Start database transaction to prevent double booking race conditions
-        DB::beginTransaction();
+        // Retrieve vehicle details
+        $vehicle = Vehicle::select('vehicle_id', 'model_id', 'availability', 'rental_price', 'availability_calendar', 'commission_percent', 'vehicle_created_by')->with('model.category', 'model.category.vehicleType')->where('vehicle_id', $request->vehicle_id)->where('availability', true)->first();
+        $rentalPrice = $vehicle->rental_price;
+        $startDate = Carbon::parse($request->start_date);
+        $endDate = Carbon::parse($request->end_date);
 
-        try {
-            // Retrieve vehicle details with lockForUpdate to block concurrent requests for the same vehicle
-            $vehicle = Vehicle::select('vehicle_id', 'model_id', 'availability', 'rental_price', 'availability_calendar', 'commission_percent', 'vehicle_created_by')
-                ->with('model.category', 'model.category.vehicleType')
-                ->where('vehicle_id', $request->vehicle_id)
-                ->where('availability', true)
-                ->lockForUpdate()
-                ->first();
+        // Check if Vehicle host has restricted this vehicle to book in Night time or not
+        $checkVehicleInNightTime = checkVehicleInNightTime($vehicle, $startDate, $endDate);
+        if ($checkVehicleInNightTime == false) {
+            return $this->errorResponse('You can not book this vehicle between 12 AM and 6 AM.');
+        }
 
-            if (!$vehicle) {
-                DB::rollBack();
-                return $this->errorResponse('The vehicle is not available.');
+        $tripDurationMinutes = $endDate->diffInMinutes($startDate);
+        $tripDurationHours = $tripDurationMinutes / 60;
+        $customerId = $this->userAuthDetails->customer_id;
+        $mobileNo = $this->userAuthDetails->mobile_number;
+
+        $setting = Setting::first();
+        $bookingGap = $setting->booking_gap ?? 30;
+        $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
+        if (is_countable($checkOffer) && count($checkOffer) > 0) {
+            $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
+        }
+        $user = Customer::where('customer_id', $customerId)->first();
+        //CHECK IF THE VEHICLE IS AVAILABLE IN VEHICLE TABLE OR NOT
+        if ($vehicle == '') {
+            return $this->errorResponse('The vehicle is not available.');
+        }
+        //CHECKED IF THIS VEHICLE iS HOLD BY ADMIN OR NOT
+        if (!empty($vehicle->availability_calendar)) {
+            $availabilityRes = checkAvailabilityDates($vehicle->availability_calendar, $startDate, $endDate);
+            if ($availabilityRes != '') {
+                return $this->errorResponse($availabilityRes);
             }
+        }
+        //CHECKED IF THIS VEHICLE ID BOOKED OR NOT WITH OTHER ORDER
+        $checkedBookedVehicele = checkedBookedVehicele($vehicle->vehicle_id, $startDate, $endDate, $bookingGap);
+        if ($checkedBookedVehicele != '') {
+            return $this->errorResponse($checkedBookedVehicele);
+        }
+        //CHECKED IF USER HAS BOOKED ANOTHER VEHICLE ON SAME TIME OR NOT
+        $checkedUserBookedVehicle = checkedUserBookedVehicle($customerId, $bookingGap, $startDate, $endDate);
+        if ($checkedUserBookedVehicle != '') {
+            return $this->errorResponse($checkedUserBookedVehicle);
+        }
 
-            $rentalPrice = $vehicle->rental_price;
-            $startDate = Carbon::parse($request->start_date);
-            $endDate = Carbon::parse($request->end_date);
+        $typeId = $vehicle->model->category->vehicleType->type_id ?? NULL;
+        $vehicleCommissionPercent = $vehicle->commission_percent ?? 0;
 
-            // Check if Vehicle host has restricted this vehicle to book in Night time or not
-            $checkVehicleInNightTime = checkVehicleInNightTime($vehicle, $startDate, $endDate);
-            if ($checkVehicleInNightTime == false) {
-                DB::rollBack();
-                return $this->errorResponse('You can not book this vehicle between 12 AM and 6 AM.');
+        $rentalBooking = new RentalBooking();
+        $customerGst = '';
+        $customerGst = $user->gst_number ?? '';
+        $taxRate = $customerGst ? 0.18 : 0.05;
+        $rentalBooking->tax_rate = $taxRate;
+
+        $rentalCostDetails = $rentalBooking->computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $request->input('unlimited_kms', false), $request->coupon_code, $startDate, $endDate, $typeId, null, 'new_booking', $vehicleCommissionPercent, $taxRate, $vehicle->vehicle_id);
+
+        // Create the rental booking
+        $rentalBooking->customer_id = $customerId;
+        $rentalBooking->vehicle_id = $request->vehicle_id;
+        $rentalBooking->initial_vehicle_id = $request->vehicle_id;
+        $rentalBooking->pickup_date = $request->start_date;
+        $rentalBooking->return_date = $request->end_date;
+        $rentalBooking->rental_duration_minutes = $tripDurationMinutes;
+        $rentalBooking->unlimited_kms = $request->input('unlimited_kms', false);
+        $rentalBooking->total_cost = $rentalCostDetails['total_amount'];
+        $rentalBooking->commission_percent = $vehicleCommissionPercent;
+        $rentalBooking->status = 'pending'; // or any other default status
+        $rentalBooking->rental_type = $request->rental_type ?? 'default'; // or any other default rental type
+        $rentalBooking->save();
+
+        if ($rentalBooking->vehicle_id != '') {
+            $responseDetails = getLocationDetails($rentalBooking->vehicle_id);
+            if ($responseDetails != null) {
+                $rentalBooking->location_id = (int) $responseDetails['id'] ?? null;
+                $rentalBooking->location_from = $responseDetails['from'] ?? null;
+                $rentalBooking->save();
             }
-
-            $tripDurationMinutes = $endDate->diffInMinutes($startDate);
-            $tripDurationHours = $tripDurationMinutes / 60;
-            $customerId = $this->userAuthDetails->customer_id;
-            $mobileNo = $this->userAuthDetails->mobile_number;
-
-            $setting = Setting::first();
-            $bookingGap = $setting->booking_gap ?? 30;
-            $checkOffer = OfferDate::where('vehicle_id', $vehicle->vehicle_id)->get();
-            if (is_countable($checkOffer) && count($checkOffer) > 0) {
-                $rentalPrice = getRentalPrice($rentalPrice, $vehicle->vehicle_id);
-            }
-            $user = Customer::where('customer_id', $customerId)->first();
-
-            //CHECKED IF THIS VEHICLE iS HOLD BY ADMIN OR NOT
-            if (!empty($vehicle->availability_calendar)) {
-                $availabilityRes = checkAvailabilityDates($vehicle->availability_calendar, $startDate, $endDate);
-                if ($availabilityRes != '') {
-                    DB::rollBack();
-                    return $this->errorResponse($availabilityRes);
-                }
-            }
-            //CHECKED IF THIS VEHICLE ID BOOKED OR NOT WITH OTHER ORDER
-            $checkedBookedVehicele = checkedBookedVehicele($vehicle->vehicle_id, $startDate, $endDate, $bookingGap);
-            if ($checkedBookedVehicele != '') {
-                DB::rollBack();
-                return $this->errorResponse($checkedBookedVehicele);
-            }
-            //CHECKED IF USER HAS BOOKED ANOTHER VEHICLE ON SAME TIME OR NOT
-            $checkedUserBookedVehicle = checkedUserBookedVehicle($customerId, $bookingGap, $startDate, $endDate);
-            if ($checkedUserBookedVehicle != '') {
-                DB::rollBack();
-                return $this->errorResponse($checkedUserBookedVehicle);
-            }
-
-            $typeId = $vehicle->model->category->vehicleType->type_id ?? NULL;
-            $vehicleCommissionPercent = $vehicle->commission_percent ?? 0;
-
-            $rentalBooking = new RentalBooking();
-            $customerGst = '';
-            $customerGst = $user->gst_number ?? '';
-            $taxRate = $customerGst ? 0.18 : 0.05;
-            $rentalBooking->tax_rate = $taxRate;
-
-            $rentalCostDetails = $rentalBooking->computeRentalCostDetails($rentalPrice, $tripDurationMinutes, $request->input('unlimited_kms', false), $request->coupon_code, $startDate, $endDate, $typeId, null, 'new_booking', $vehicleCommissionPercent, $taxRate, $vehicle->vehicle_id);
-
-            // Create the rental booking
-            $rentalBooking->customer_id = $customerId;
-            $rentalBooking->vehicle_id = $request->vehicle_id;
-            $rentalBooking->initial_vehicle_id = $request->vehicle_id;
-            $rentalBooking->pickup_date = $request->start_date;
-            $rentalBooking->return_date = $request->end_date;
-            $rentalBooking->rental_duration_minutes = $tripDurationMinutes;
-            $rentalBooking->unlimited_kms = $request->input('unlimited_kms', false);
-            $rentalBooking->total_cost = $rentalCostDetails['total_amount'];
-            $rentalBooking->commission_percent = $vehicleCommissionPercent;
-            $rentalBooking->status = 'pending'; // or any other default status
-            $rentalBooking->rental_type = $request->rental_type ?? 'default'; // or any other default rental type
-            $rentalBooking->save();
-
-            if ($rentalBooking->vehicle_id != '') {
-                $responseDetails = getLocationDetails($rentalBooking->vehicle_id);
-                if ($responseDetails != null) {
-                    $rentalBooking->location_id = (int) $responseDetails['id'] ?? null;
-                    $rentalBooking->location_from = $responseDetails['from'] ?? null;
-                    $rentalBooking->save();
-                }
-            }
-
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->errorResponse('Booking failed: ' . $e->getMessage());
         }
         $setting = Setting::first();
         $finalAmount = round($rentalCostDetails['final_amount'], 2);
@@ -341,71 +319,65 @@ class RentalBookingController extends Controller
             return $this->errorResponse('Please contact admin as no any payment gateway is activated');
         }
 
-        DB::beginTransaction();
-        try {
-            $bookingTransaction = new BookingTransaction();
-            $bookingTransaction->booking_id = $rentalBooking->booking_id;
-            $bookingTransaction->timestamp = now()->toDateTimeString();
-            $bookingTransaction->type = 'new_booking';
-            $bookingTransaction->start_date = $request->start_date;
-            $bookingTransaction->end_date = $request->end_date;
-            $bookingTransaction->unlimited_kms = $request->input('unlimited_kms', false);
-            $bookingTransaction->rental_price = $rentalPrice;
-            $bookingTransaction->trip_duration_minutes = $tripDurationMinutes;
-            $bookingTransaction->trip_amount = $rentalCostDetails['trip_amount'];
-            $bookingTransaction->tax_amt = $rentalCostDetails['tax_amt'];
-            $bookingTransaction->coupon_discount = $rentalCostDetails['coupon_discount'] ?? 0;
-            $bookingTransaction->coupon_code = $request->coupon_code;
-            $bookingTransaction->coupon_code_id = $rentalCostDetails['coupon_code_id'] ?? null;
-            $bookingTransaction->trip_amount_to_pay = $rentalCostDetails['trip_amount_to_pay'];
-            $bookingTransaction->convenience_fee = $rentalCostDetails['convenience_fee'];
-            $bookingTransaction->total_amount = $rentalCostDetails['total_amount'];
-            $bookingTransaction->refundable_deposit = $rentalCostDetails['refundable_deposit'] ?? 0;
-            $bookingTransaction->final_amount = $rentalCostDetails['final_amount'];
-            $bookingTransaction->order_type = 'new_booking';
-            $bookingTransaction->paid = false;
-            $bookingTransaction->razorpay_order_id = $razorpayOrderID;
-            $bookingTransaction->razorpay_payment_id = '';
-            $bookingTransaction->cashfree_order_id = $cashfreeOrderId;
-            $bookingTransaction->cashfree_payment_session_id = $cashfreepaymentSessionId;
-            $bookingTransaction->vehicle_commission_amount = $rentalCostDetails['vehicle_commission_amt'] ?? 0;
-            $bookingTransaction->vehicle_commission_tax_amt = $rentalCostDetails['vehicle_commission_tax_amt'] ?? 0;
-            $bookingTransaction->save();
+        $bookingTransaction = new BookingTransaction();
+        $bookingTransaction->booking_id = $rentalBooking->booking_id;
+        $bookingTransaction->timestamp = now()->toDateTimeString();
+        $bookingTransaction->type = 'new_booking';
+        $bookingTransaction->start_date = $request->start_date;
+        $bookingTransaction->end_date = $request->end_date;
+        $bookingTransaction->unlimited_kms = $request->input('unlimited_kms', false);
+        $bookingTransaction->rental_price = $rentalPrice;
+        $bookingTransaction->trip_duration_minutes = $tripDurationMinutes;
+        $bookingTransaction->trip_amount = $rentalCostDetails['trip_amount'];
+        $bookingTransaction->tax_amt = $rentalCostDetails['tax_amt'];
+        $bookingTransaction->coupon_discount = $rentalCostDetails['coupon_discount'] ?? 0;
+        $bookingTransaction->coupon_code = $request->coupon_code;
+        $bookingTransaction->coupon_code_id = $rentalCostDetails['coupon_code_id'] ?? null;
+        $bookingTransaction->trip_amount_to_pay = $rentalCostDetails['trip_amount_to_pay'];
+        $bookingTransaction->convenience_fee = $rentalCostDetails['convenience_fee'];
+        $bookingTransaction->total_amount = $rentalCostDetails['total_amount'];
+        $bookingTransaction->refundable_deposit = $rentalCostDetails['refundable_deposit'] ?? 0;
+        $bookingTransaction->final_amount = $rentalCostDetails['final_amount'];
+        $bookingTransaction->order_type = 'new_booking';
+        $bookingTransaction->paid = false;
+        $bookingTransaction->razorpay_order_id = $razorpayOrderID;
+        $bookingTransaction->razorpay_payment_id = '';
+        $bookingTransaction->cashfree_order_id = $cashfreeOrderId;
+        $bookingTransaction->cashfree_payment_session_id = $cashfreepaymentSessionId;
+        $bookingTransaction->vehicle_commission_amount = $rentalCostDetails['vehicle_commission_amt'] ?? 0;
+        $bookingTransaction->vehicle_commission_tax_amt = $rentalCostDetails['vehicle_commission_tax_amt'] ?? 0;
+        $bookingTransaction->save();
 
-            $pg = $rKey = '';
-            $setting = Setting::first();
-            if ($setting) {
-                $pg = $setting->payment_gateway_type ?? '';
-                if (strtolower($pg) == 'razorpay') {
-                    $rKey = getRazorpayKey();
-                }
+        $pg = $rKey = '';
+        $setting = Setting::first();
+        if ($setting) {
+            $pg = $setting->payment_gateway_type ?? '';
+            if (strtolower($pg) == 'razorpay') {
+                $rKey = getRazorpayKey();
             }
+        }
 
-            $payment = new Payment();
-            $payment->booking_id = $rentalBooking->booking_id;
-            $payment->razorpay_order_id = $razorpayOrderID;
-            $payment->cashfree_order_id = $cashfreeOrderId;
-            $payment->cashfree_payment_session_id = $cashfreepaymentSessionId;
-            $payment->amount = $finalAmount;
-            $payment->payment_date = now()->toDateString(); // Adjust this based on your requirements
-            $payment->status = 'pending'; // or any other default status
-            $payment->payment_gateway_used = $pg;
-            //$payment->payment_gateway_charges = 0;
-            $payment->save();
+        $payment = new Payment();
+        $payment->booking_id = $rentalBooking->booking_id;
+        $payment->razorpay_order_id = $razorpayOrderID;
+        $payment->cashfree_order_id = $cashfreeOrderId;
+        $payment->cashfree_payment_session_id = $cashfreepaymentSessionId;
+        $payment->amount = $finalAmount;
+        $payment->payment_date = now()->toDateString(); // Adjust this based on your requirements
+        $payment->status = 'pending'; // or any other default status
+        $payment->payment_gateway_used = $pg;
+        //$payment->payment_gateway_charges = 0;
+        $payment->save();
 
+        try {
+            //$mobileArr = config('global_values.mobile_no_array');
             if (isset($this->userAuthDetails) && $this->userAuthDetails->is_test_user != 1) {
                 $payment->payment_env = 'live';
             } else {
                 $payment->payment_env = 'test';
             }
             $payment->save();
-
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            // Delete the created pending booking to maintain database consistency
-            RentalBooking::where('booking_id', $rentalBooking->booking_id)->delete();
-            return $this->errorResponse('Transaction failed, booking cancelled: ' . $e->getMessage());
+        } catch (Exception $e) {
         }
 
         return $this->successResponse(['razorpay_order_id' => $razorpayOrderID, 'razorpay_key' => $rKey, 'final_amount' => (string) $finalAmount, 'booking_id' => $rentalBooking->booking_id, 'which_pg' => strtoupper($pg), 'cashFree_order_id' => $cashfreeOrderId, 'cashFree_session_id' => $cashfreepaymentSessionId], 'Rental booking created successfully.');
@@ -765,10 +737,7 @@ class RentalBookingController extends Controller
             $customerId = $this->userAuthDetails->customer_id;
             $customerMobileNumber = $this->userAuthDetails->mobile_number;
         }
-        $client = new Client([
-            'timeout' => 60.0,
-            'connect_timeout' => 10.0,
-        ]);
+        $client = new Client();
         $orderData = [
             'order_id' => 'Order_' . $booking_id . '_' . $customerId . '_' . generateRandomString(7),
             'order_amount' => $amount,
@@ -1985,23 +1954,23 @@ class RentalBookingController extends Controller
             $summaryTable = $this->buildPricingTable($pricingShowCase);
             return $this->successResponse(['table_html' => $summaryTable], 'Pricing show case retrieved successfully.');
         } /*elseif(is_countable($vehiclePricingControl) && count($vehiclePricingControl) > 0) {
-foreach($vehiclePricingControl as $k => $v){
- if($v->trip_amount > 0){
-     $tripAmount = $v->trip_amount;
-     $unKMtripAmount = ($v->trip_amount) * 1.3;
-     $perHourRate = $v->per_hour_rate; // Calculate per hour rate based on the total trip amount and duration
-     $duration = $v->duration;
-     $durationHoursLimit = $v->trip_amount_km_limit;
-     //$pricingShowCase = [];
-     $pricingShowCase[$k]['duration'] = $duration;
-     $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." )";
-     $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);
-     $pricingShowCase[$k]['per_hour_rate'] = '₹' . number_format(($perHourRate), 2);
- }
-}
-$summaryTable = $this->buildPricingTable($pricingShowCase);          
-return $this->successResponse(['table_html' => $summaryTable], 'Pricing show case retrieved successfully.');
-}*/ else {
+        foreach($vehiclePricingControl as $k => $v){
+            if($v->trip_amount > 0){
+                $tripAmount = $v->trip_amount;
+                $unKMtripAmount = ($v->trip_amount) * 1.3;
+                $perHourRate = $v->per_hour_rate; // Calculate per hour rate based on the total trip amount and duration
+                $duration = $v->duration;
+                $durationHoursLimit = $v->trip_amount_km_limit;
+                //$pricingShowCase = [];
+                $pricingShowCase[$k]['duration'] = $duration;
+                $pricingShowCase[$k]['trip_amount_in_rupees'] = '₹' . number_format(($tripAmount), 2)." ( ".$durationHoursLimit." )";
+                $pricingShowCase[$k]['unlimited_km_trip_amount_in_rupees'] = '₹' . number_format(($unKMtripAmount), 2);
+                $pricingShowCase[$k]['per_hour_rate'] = '₹' . number_format(($perHourRate), 2);
+            }
+        }
+        $summaryTable = $this->buildPricingTable($pricingShowCase);          
+        return $this->successResponse(['table_html' => $summaryTable], 'Pricing show case retrieved successfully.');
+    }*/ else {
             $rules = TripAmountCalculationRule::select('id', 'hours', 'multiplier')->orderBy('hours', 'desc')->get();
             $summaryTable = [];
             if (is_countable($rules) && count($rules) > 0) {
@@ -2509,10 +2478,7 @@ return $this->successResponse(['table_html' => $summaryTable], 'Pricing show cas
             }
 
             try {
-                $client = new Client([
-                    'timeout' => 60.0,
-                    'connect_timeout' => 10.0,
-                ]);
+                $client = new Client();
                 $response = $client->request('GET', $cUrl . '/' . $orderId, [
                     'headers' => [
                         'Accept' => 'application/json',

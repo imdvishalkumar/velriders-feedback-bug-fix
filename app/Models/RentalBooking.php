@@ -75,8 +75,8 @@ class RentalBooking extends Model
     ];
 
     protected $appends = ['city_name', 'button_visiblity', 'status_map', 'start_images', 'end_images', 'invoice_pdf', 'admin_invoice_pdf', 'summary_pdf', 'admin_summary_pdf', 'message_map', 'dl_status', 'govtid_status', 'allow_rating', 'rating_value', 'feedback_value', 'pay_now_status', 'admin_penalty_amount', 'price_summary', 'admin_customer_aggrement', 'host_payment_date'];
-
-    protected static function boot()
+	
+  	protected static function boot()
     {
         parent::boot();
 
@@ -90,13 +90,13 @@ class RentalBooking extends Model
             }
         });
     }
-
+  
     public function getCityNameAttribute()
     {
-        if (!empty($this->attributes['city_name'])) {
+      	if (!empty($this->attributes['city_name'])) {
             return $this->attributes['city_name'];
         }
-
+      
         $cityName = '';
         if ($this->location_from == 1) { // Branch
             $branch = Branch::where('branch_id', $this->location_id)->first();
@@ -117,8 +117,8 @@ class RentalBooking extends Model
 
         return $cityName;
     }
-
-    public function toArray()
+  
+  	public function toArray()
     {
         $array = parent::toArray();
         if (isset($array['vehicle']) && is_array($array['vehicle'])) {
@@ -1139,6 +1139,8 @@ class RentalBooking extends Model
             ->where('type', 'extension')
             ->where('final_amount', '!=', 0)
             ->where('paid', 0)
+            ->where('end_date', '>', $this->return_date) // Added on 10 Aug 2026 by Vishal:
+			// Ignore historical failed/pending extension transactions that have already been superseded by a successful extension payment.
             ->exists();
 
         if ($completionTransaction || $adminPenalty || $penaltyTransaction || $extensionTransaction) {

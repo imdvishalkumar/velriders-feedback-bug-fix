@@ -1,0 +1,12 @@
+[2026-08-14 11:26:22] local.ERROR: FCM service account file missing or unreadable at - C:\Apache24\htdocs\vel-vue-admin\vel-riders-backend\config\velriders-8db39-5a56d176b2d7.json  
+[2026-08-14 11:45:33] local.ERROR: FCM service account file missing or unreadable at - C:\Apache24\htdocs\vel-vue-admin\vel-riders-backend\config\velriders-8db39-5a56d176b2d7.json  
+[2026-08-14 11:45:33] local.ERROR: Access Token for Push Notification is not found..  
+[2026-08-14 13:16:35] local.ERROR: FCM service account file missing or unreadable at - C:\Apache24\htdocs\vel-vue-admin\vel-riders-backend\config\velriders-8db39-5a56d176b2d7.json  
+[2026-08-14 13:16:35] local.ERROR: Access Token for Push Notification is not found..  
+[2026-08-14 13:16:35] local.ERROR: Something went wrong.. Notification not sent to this number - 6354419405 and its response - {"status_code":0,"response":{"error":{"status":"NO_ACCESS_TOKEN"}}}  
+[2026-08-14 13:16:35] local.ERROR: FCM service account file missing or unreadable at - C:\Apache24\htdocs\vel-vue-admin\vel-riders-backend\config\velriders-8db39-5a56d176b2d7.json  
+[2026-08-14 13:16:35] local.ERROR: Access Token for Push Notification is not found..  
+[2026-08-14 13:16:35] local.ERROR: Something went wrong.. Notification not sent to this number - 6354419405 and its response - {"status_code":0,"response":{"error":{"status":"NO_ACCESS_TOKEN"}}}  
+[2026-08-14 13:16:35] local.ERROR: FCM service account file missing or unreadable at - C:\Apache24\htdocs\vel-vue-admin\vel-riders-backend\config\velriders-8db39-5a56d176b2d7.json  
+[2026-08-14 13:16:35] local.ERROR: Access Token for Push Notification is not found..  
+[2026-08-14 13:16:35] local.ERROR: Something went wrong.. Notification not sent to this number - 6354419405 and its response - {"status_code":0,"response":{"error":{"status":"NO_ACCESS_TOKEN"}}}  
